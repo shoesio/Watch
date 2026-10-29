@@ -90,3 +90,14 @@ class DiscoveryTests(unittest.TestCase):
   self.assertIn('Documentaries',self.discovery.five_preview({'id':'1','title':'A Factual Show','genre':'Documentary','primary_vod_genre':'Entertainment'})['genres'])
 
 if __name__=='__main__':unittest.main()
+
+class ITVDiscoveryTests(unittest.TestCase):
+ def test_itv_native_descriptor_becomes_pi_provider_only_after_verification(self):
+  with tempfile.TemporaryDirectory() as root:
+   d=Discovery(root,'http://pi:8109');d.itv_raw={'key':{'key':'key'}}
+   with self.assertRaises(ValueError):d.load_itv('key')
+   d.itv_enabled=True
+   with patch('itv_catalogue.details',return_value={'episodes':[{'id':'free','kind':'native','playlist_url':'https://magni.itv.com/playlist/itvonline/ITV/1'},{'id':'paid','kind':'native','premium':True}]}):
+    show=d.load_itv('key')
+   self.assertEqual([e['id'] for e in show['episodes']],['free'])
+   self.assertEqual(show['episodes'][0]['kind'],'provider')

@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.310', seekTransition = false;
+ var buildVersion = '0.327', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -17,7 +17,7 @@ var Watch = (function () {
  var waiting = false, frozenFrame = false, recoveringView = false, retryFailed = false, recoveryItem = null, recoveryTarget = 0;
  var retryCount = 0, retryTimer = null, bufferTimer = null, stableSince = 0;
  function trace(event) { if (WATCH_CONNECTION.key !== 'SET_DURING_PI_PACKAGING') { request('POST', '/api/diagnostic', {event:event,app_version:buildVersion,position:position,playing:playing,waiting:waiting,seeking:seekTransition}, function () {}); } }
- function playerView(open) { document.body.setAttribute('data-player-open',open ? 'true' : 'false'); el('shell').style.display = open ? 'none' : 'block'; }
+ function playerView(open) { if (open) { document.documentElement.style.background = 'rgba(0,0,0,0)'; document.body.style.background = 'rgba(0,0,0,0)'; } document.body.setAttribute('data-player-open',open ? 'true' : 'false'); el('shell').style.display = open ? 'none' : 'block'; }
  function el(id) { return document.getElementById(id); }
  function text(id, value) { el(id).textContent = value || ''; }
  function message(value) { text('status', value); }
@@ -73,7 +73,7 @@ var Watch = (function () {
  function branding(node, brands) {
   var i, img; node.innerHTML = '';
   for (i = 0; i < (brands || []).length; i += 1) {
-   if (!/^(bbc|channel4|u|channel5)$/.test(brands[i].id)) { continue; }
+   if (!/^(bbc|channel4|u|channel5|itv)$/.test(brands[i].id)) { continue; }
    img = document.createElement('img'); img.className = 'brandLogo'; img.src = 'images/brands/' + brands[i].id + '.png'; img.alt = brands[i].name; node.appendChild(img);
   }
  }
@@ -179,7 +179,17 @@ var Watch = (function () {
  function searchKey() { var value = searchLetters[searchFocus]; if (value === 'Search') { if (searchValue.length < 2) { return; } el('searchMenu').style.display = 'none'; browseQuery = searchValue; browseMode = 'search'; browseSnapshot = ''; group = null; tab = 1; area = 'grid'; loadPage(0); } else { if (value === 'Delete') { searchValue = searchValue.slice(0,-1); } else if (searchValue.length < 80) { searchValue += value === 'Space' ? ' ' : value; } paintSearch(); } }
  function setFavourite() { var chosen = group || rows[focus]; if (!chosen || chosen.live) { return; } request('POST','/api/favourite',{id:chosen.id,favourite:!chosen.favourite},function (error,data) { if (error) { message(error); return; } chosen.favourite = data.favourite; paint(); message(data.favourite ? 'Added to your local favourites' : 'Removed from your local favourites'); }); }
  function importProgramme(item) { var mine = ++generation; busy = true; livePlayback = false; selectedArtwork = artwork(item); playerView(true); waiting = true; paintProgramme({show_title:item.title,title:item.title,description:item.description,brands:item.brands,show_logo:item.show_logo}); setPreload(selectedArtwork); overlay('Loading episodes'); request('POST','/api/import',{ref:item.discovery_ref},function(error,data) { if (mine !== generation) { return; } busy = false; waiting = false; playerView(false); el('playback').style.display = 'none'; el('bufferSpinner').style.display = 'none'; if (error) { message(error); return; } previous={page:page,focus:focus,mode:browseMode,snapshot:browseSnapshot};previousTab=tab;group=data;choosingSeason=true;season='all';loadPage(0); }); }
- function setPreload(source) { var photo = el('preloadPhoto'); photo.style.display = source ? 'block' : 'none'; if (!source) { return; } cover(photo,960,540,false);photo.src = source; if (photo.complete && photo.naturalWidth) { photo.onload(); } }
+ function setPreload(source) {
+  var photo = el('preloadPhoto');
+  if (!source) {
+   // Detach the bitmap: hiding it alone can leave an Orsay graphics surface over native video.
+   photo.onload = null; photo.onerror = null; photo.style.visibility = 'hidden'; photo.style.display = 'none'; photo.removeAttribute('src');
+   var empty = document.createElement('img'); empty.id = 'preloadPhoto'; empty.alt = ''; empty.style.display = 'none'; empty.style.visibility = 'hidden';
+   photo.parentNode.replaceChild(empty, photo); return;
+  }
+  photo.style.display = 'block'; cover(photo,960,540,false); photo.src = source;
+  if (photo.complete && photo.naturalWidth) { photo.onload(); }
+ }
  function paintGenres() { var box = el('genreChoices'), i, choice; box.innerHTML = ''; for (i = 0; i < genreChoices.length; i += 1) { choice = document.createElement('div'); choice.textContent = genreChoices[i]; choice.className = i === genreFocus ? 'selected' : ''; box.appendChild(choice); } if (box.children[genreFocus] && box.children[genreFocus].scrollIntoView) { box.children[genreFocus].scrollIntoView(false); } }
  function openGenres() { if (!genreChoices.length) { message('No genres are available in this section.'); return; } text('genreHeading', tab === 3 ? 'Filter films' : 'Filter shows'); genreFocus = Math.max(0, genreChoices.indexOf(genre || 'All genres')); el('genreMenu').style.display = 'block'; paintGenres(); }
  function moveNav(delta) { var order = [], index = 0, i; for (i = 0; i < navOrder.length; i += 1) { if (el('nav' + navOrder[i]).style.display !== 'none') { order.push(navOrder[i]); } } for (i = 0; i < order.length; i += 1) { if (order[i] === nav) { index = i; break; } } nav = order[Math.max(0, Math.min(order.length - 1, index + delta))]; }
@@ -217,6 +227,7 @@ var Watch = (function () {
  }
  function overlay(status, seconds) {
   el('playback').className = paused ? 'paused' : (waiting ? 'buffering' : '');
+  if (waiting && el('preloadPhoto').style.display !== 'none') { el('playback').className += ' preloading'; }
   if (retryFailed) { el('playback').className += ' connection-error'; }
   el('bufferSpinner').style.display = waiting ? 'block' : 'none';
   clearTimeout(hide); text('playbackStatus', status); el('playback').style.display = 'block';
@@ -240,7 +251,7 @@ var Watch = (function () {
   if (keepOverlay) {
    waiting = true; recoveringView = true; playerView(true); overlay('Buffering… reconnecting');
   } else {
-   waiting = false; recoveringView = false; retryFailed = false; el('bufferSpinner').style.display = 'none';
+   setPreload(''); waiting = false; recoveringView = false; retryFailed = false; el('bufferSpinner').style.display = 'none';
   el('qualityBadge').style.display = 'none'; text('qualityBadge', '');
   el('playback').style.display = 'none'; el('shell').style.display = 'block'; document.body.style.background = '#0c111b'; document.documentElement.style.background = '#0c111b';
   if (showLibrary) { message('Ready. Choose another episode.'); }
@@ -253,17 +264,18 @@ var Watch = (function () {
   if (!player || typeof player.Play !== 'function') { stop(false); message('The Samsung native player is unavailable in this browser. Open the installed Smart Hub app.'); return; }
   if (frozenFrame) { try { player.Stop(); } catch (ignore) {} frozenFrame = false; }
   playing = true; busy = false; paused = false; waiting = true; recoveringView = false; retryFailed = false;
-  playerView(true); document.body.style.background = 'transparent'; document.documentElement.style.background = 'transparent';
-  setPreload('');paintProgramme(data); overlay('Opening stream…');
+  playerView(true); document.body.style.background = 'rgba(0,0,0,0)'; document.documentElement.style.background = 'rgba(0,0,0,0)';
+  setPreload(''); paintProgramme(data); overlay('Opening stream…');
   text('qualityBadge', data.spec && data.spec.quality); el('qualityBadge').style.display = data.spec && data.spec.quality ? 'block' : 'none';
   try {
    player.SetDisplayArea(0, 0, 960, 540);
    if (player.Play(data.url) === 0) { throw new Error('Rejected'); }
-   try { if (typeof player.SetInitialBuffer === 'function') { player.SetInitialBuffer(1024 * 1024); } if (typeof player.SetPendingBuffer === 'function') { player.SetPendingBuffer(512 * 1024); } if (typeof player.SetInitialTimeOut === 'function') { player.SetInitialTimeOut(45); } } catch (bufferOptionUnavailable) {}
+   try { if (typeof player.SetInitialBuffer === 'function') { player.SetInitialBuffer(1024 * 1024); } if (typeof player.SetPendingBuffer === 'function') { player.SetPendingBuffer(1024 * 1024); } if (typeof player.SetInitialTimeOut === 'function') { player.SetInitialTimeOut(45); } } catch (bufferOptionUnavailable) {}
    heartbeat = setInterval(function () { if (playing && ticket) { request('POST', '/api/play/' + ticket + '/heartbeat', {position: position}, function () {}); } }, 5000);
    readyTimer = setTimeout(function () { if (playing) { recover(); } }, 45000);
   } catch (e) { recover(); }
  }
+ function presentation(item) { var now = item.live && item.guide && item.guide.now; if (!now) { return item; } return {live:true,title:now.title || item.title,show_title:item.title,description:now.subtitle || now.description || '',brands:item.brands,channel_brand:item.channel_brand}; }
  function paintProgramme(data) {
   var show = data.show_title || (group && group.title) || data.title;
   text('playingShow', show);
@@ -278,8 +290,10 @@ var Watch = (function () {
    if (series && !/^(episodes|film)$/i.test(series)) { parts.push(/^\d+$/.test(series) ? 'Series ' + series : series); }
    if (episode) { parts.push('Episode ' + episode); }
   }
+  if (data.duration_seconds && !livePlayback) { parts.push(Math.round(Number(data.duration_seconds)/60) + ' min'); }
   text('playingEpisode', parts.join(' · '));
   branding(el('playingBrands'), data.brands);
+  if (data.channel_brand) { var mark=document.createElement('img');mark.className='channelMark';mark.src='images/marks/'+data.channel_brand+'.png';mark.alt=show;el('playingBrands').appendChild(mark); }
   var logo = el('playingLogo'); logo.style.display = 'none'; el('playingShow').style.display = 'block';
   logo.onload = null; logo.onerror = null;
   if (data.show_logo) {
@@ -293,7 +307,8 @@ var Watch = (function () {
  }
  function start(item, startPosition, recovering) {
   if (!recovering) { retryCount = 0; }
-  if (!recoveringView) { livePlayback = !!item.live; selectedArtwork = rows[focus] ? artwork(rows[focus]) : ''; playerView(true); waiting = true; paintProgramme({show_title:group ? group.title : item.title,title:item.title,description:item.description,show_logo:item.show_logo || (group && group.show_logo),brands:item.brands || (group && group.brands)});setPreload(selectedArtwork);overlay('Preparing'); }
+  var programmeInfo=presentation(item);livePlayback=!!item.live || livePlayback;
+  if (!recoveringView) { livePlayback = !!item.live; selectedArtwork = rows[focus] ? artwork(rows[focus]) : ''; playerView(true); waiting = true; paintProgramme({show_title:programmeInfo.show_title || (group ? group.title : item.title),title:programmeInfo.title,description:programmeInfo.description,duration_seconds:item.duration_seconds,season:item.season,episode_number:item.episode_number,channel_brand:programmeInfo.channel_brand,show_logo:item.show_logo || (group && group.show_logo),brands:item.brands || (group && group.brands)});setPreload(selectedArtwork);overlay('Preparing'); }
   if (recoveringView) { waiting = true; overlay('Buffering… preparing stream'); }
   var mine = ++generation;
   busy = true; message('Preparing ' + item.title + '… Return cancels.');
@@ -302,12 +317,12 @@ var Watch = (function () {
   currentEpisode = payload.episode_id;
   request('POST', '/api/prepare', payload, function (err, data) {
    if (mine !== generation) { if (data && data.job) { request('DELETE', '/api/prepare/' + data.job, null, function () {}); } return; }
-   if (err) { busy = false; if (recovering) { retryAgain(item, startPosition); } else { stop(true); message(err); } return; }
+   if (err) { busy = false; if (recovering || item.live) { retryAgain(item, startPosition); } else { stop(true); message(err); } return; }
    job = data.job;
    function check() {
     request('GET', '/api/prepare/' + encodeURIComponent(job), null, function (error, value) {
      if (mine !== generation) { return; }
-     if (error || value.state === 'failed') { job = null; busy = false; if (recovering) { retryAgain(item, startPosition); } else { stop(true); message(error || value.error); } }
+     if (error || value.state === 'failed') { job = null; busy = false; if (recovering || item.live) { retryAgain(item, startPosition); } else { stop(true); message(error || value.error); } }
      else if (value.state === 'ready') { begin(value); }
      else { poll = setTimeout(check, 1500); }
     });
@@ -355,7 +370,7 @@ var Watch = (function () {
   if (sourceOffset + value - nativeOrigin < position - 2) { nativeOrigin = sourceOffset + value - position; }
   var previousPosition = position;
   position = Math.max(position, sourceOffset + value - nativeOrigin);
-  if (position > previousPosition + 0.1) { seekTransition = false; }
+  if (position > previousPosition + 0.1) { seekTransition = false; if (waiting || el('preloadPhoto').style.display !== 'none') { setPreload(''); waiting = false; clearTimeout(bufferTimer); bufferTimer = null; overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); } }
   if (duration) { position = Math.min(duration, position); }
   paintTransport(); if (!seekTransition) { clearTimeout(readyTimer); }
   if (!paused && !bufferTimer) { if (!stableSince) { stableSince = new Date().getTime(); } else if (new Date().getTime() - stableSince > 30000) { retryCount = 0; } }
@@ -363,9 +378,10 @@ var Watch = (function () {
  function retryAgain(item, target) {
   if (retryTimer) { return; }
   retryCount += 1;
-  if (retryCount > 3) { busy = false; waiting = false; retryFailed = true; recoveringView = true; overlay('Connection unavailable. OK · Try again    Return · Save and close'); return; }
-  busy = true; waiting = true; recoveringView = true; recoveryItem = item; recoveryTarget = target; overlay('Buffering… reconnecting ' + retryCount + ' / 3'); message('Reconnecting ' + retryCount + ' / 3. Your position is saved. Return cancels.');
-  retryTimer = setTimeout(function () { retryTimer = null; busy = false; start(item, target, true); }, [0,2000,5000,10000][retryCount]);
+  var maxRetries = livePlayback ? 6 : 3;
+  if (retryCount > maxRetries) { busy = false; waiting = false; retryFailed = true; recoveringView = true; overlay('Connection unavailable. OK · Try again    Return · Save and close'); return; }
+  busy = true; waiting = true; recoveringView = true; recoveryItem = item; recoveryTarget = target; overlay('Buffering… reconnecting ' + retryCount + ' / ' + maxRetries); message('Reconnecting ' + retryCount + ' / ' + maxRetries + '. Your position is saved. Return cancels.');
+  retryTimer = setTimeout(function () { retryTimer = null; busy = false; start(item, target, true); }, [0,2000,5000,10000][Math.min(retryCount,3)]);
  }
  function recover() {
   if (!playing || retryTimer) { return; }
@@ -475,7 +491,7 @@ var Watch = (function () {
  return {init: init, key: key, shutdown: shutdown,
   streamReady: function () { try { player.SetDisplayArea(0, 0, 960, 540); } catch (ignore) {} },
   buffering: buffering,
-  buffered: function () { if (!playing) { return; } waiting = false; clearTimeout(bufferTimer); bufferTimer = null; if (!seekTransition) { clearTimeout(readyTimer); } overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); },
+  buffered: function () { if (!playing) { return; } setPreload(''); waiting = false; clearTimeout(bufferTimer); bufferTimer = null; if (!seekTransition) { clearTimeout(readyTimer); } overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); },
   tick: timeUpdate,
   ended: function () { trace('ended'); if (!playing || seekTransition) { return; } if (livePlayback || !duration || position < duration - 5) { recover(); } else { finished = !!duration; stop(true); } },
   failed: recover

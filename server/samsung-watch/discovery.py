@@ -5,7 +5,7 @@ from urllib.parse import urlencode
 import requests
 from episode_artwork import bbc_image
 
-PROVIDERS={'bbc':('BBC iPlayer','bbc'),'channel4':('Channel 4','channel4'),'u':('U','u'),'channel5':('Channel 5','channel5')}
+PROVIDERS={'itv':('ITVX','itv'),'bbc':('BBC iPlayer','bbc'),'channel4':('Channel 4','channel4'),'u':('U','u'),'channel5':('Channel 5','channel5')}
 def normal(text):return re.sub(r'[^\w]+',' ',str(text).casefold()).strip()
 def five_genres(item):
  from library_browse import genres
@@ -33,6 +33,9 @@ class Discovery:
   self.root=Path(root);self.base=base.rstrip('/');self.cache={};self.previews={};self.lock=threading.Lock();self.recommendation_lock=threading.Lock()
   try:self.imported=json.loads((self.root/'discovery-library.json').read_text())
   except (OSError,ValueError):self.imported={}
+  self.itv_enabled=(self.root/'itv-pi-verified.json').exists();self.itv=[]
+  try:self.itv_raw=json.loads((self.root/'itv-index.json').read_text())
+  except (OSError,ValueError):self.itv_raw={}
   self.alternates={};self.c4=[];self.five=[];self.hot=[];self.suggestions=[];self.status={}
  def get(self,url,**params):
   r=requests.get(url,params=params,timeout=(5,15),headers={'User-Agent':'Mozilla/5.0'});r.raise_for_status();return r
@@ -42,6 +45,36 @@ class Discovery:
   name,brand=PROVIDERS[provider]
   row={'id':ident,'discovery_ref':ref,'title':title,'description':description,'artwork':picture(image),'hero':picture(image),'live':False,'film':film,'recent':False,'favourite':False,'genres':[g.strip() for g in genre.split(' · ') if g.strip()],'brands':[{'id':brand,'name':name,'image':self.base+'/static/artwork/brands/'+brand+'.png'}],'episodes':[]}
   self.previews[ref]=row;return row
+ def itv_preview(self,p):
+  self.itv_raw[p['key']]=p
+  return self.preview('itv',p['key'],p['title'],p['description'],p['artwork'],p['genre'],p['film'])
+ def itv_search(self,query):
+  if not self.itv_enabled:return []
+  from itv_catalogue import search
+  rows=[self.itv_preview(p) for p in search(query)]
+  from tmdb_logos import atomic
+  atomic(self.root/'itv-index.json',json.dumps(self.itv_raw).encode())
+  return rows
+ def warm_itv(self):
+  if not self.itv_enabled:return []
+  from itv_catalogue import highlights
+  try:
+   stamp=self.root/'itv-index.json'
+   if not self.itv_raw or time.time()-stamp.stat().st_mtime>21600:
+    for p in highlights():self.itv_raw[p['key']]=p
+    from tmdb_logos import atomic
+    atomic(stamp,json.dumps(self.itv_raw).encode())
+   self.itv=[self.itv_preview(p) for p in list(self.itv_raw.values())]
+   self.status['itv']='ready'
+  except Exception:self.status['itv']='temporarily unavailable'
+ def load_itv(self,key):
+  if not self.itv_enabled:raise ValueError('ITV Pi playback has not been verified.')
+  from itv_catalogue import details
+  summary=self.itv_raw.get(key)
+  if not summary:raise ValueError('Search for this ITV programme again')
+  show=details(summary)
+  show['episodes']=[dict(ep,kind='provider') for ep in show.get('episodes',[]) if not ep.get('premium')]
+  return show
  def bbc_search(self,query):
   state=bbc_state(self.get('https://www.bbc.co.uk/iplayer/search',q=query).text)
   return [self.preview('bbc',p['id'],p['title'],p.get('synopses',{}).get('small',''),p.get('images'),p.get('labels',{}).get('category','')) for p in state.get('entities',{}).get('results',[]) if p.get('type')=='programme' and p.get('initial_children')][:16]
@@ -102,6 +135,7 @@ class Discovery:
    self.status['channel4']='ready'
   except Exception:self.status['channel4']='temporarily unavailable'
   self.warm_five()
+  self.warm_itv()
   hot=[]
   try:
    data=self.get('https://ibl.api.bbc.co.uk/ibl/v1/groups/popular/episodes',per_page=50).json()['group_episodes']['elements']
@@ -129,7 +163,7 @@ class Discovery:
   key='genre:'+genre.casefold();cached=self.cache.get(key)
   if cached and time.time()-cached[0]<1800:return cached[1]
   from recommendations import genre_matches
-  rows=[p for p in self.c4+self.five if genre_matches(p,genre)]
+  rows=[p for p in self.c4+self.five+self.itv if genre_matches(p,genre)]
   mapping={'comedy':'comedy','drama':'drama-and-soaps','documentaries':'documentaries','entertainment':'entertainment','food':'food','history':'history','science':'science-and-nature','nature':'science-and-nature','children':'cbbc'}
   slug=mapping.get(genre.casefold())
   if slug:
@@ -154,7 +188,7 @@ class Discovery:
   key='recommendation-pool:'+','.join(selected)
   cached=self.cache.get(key)
   if cached and time.time()-cached[0]<1800:return cached[1]+library
-  rows=list(self.c4)+list(self.five)+list(self.suggestions)
+  rows=list(self.c4)+list(self.five)+list(self.itv)+list(self.suggestions)
   # A full Five catalogue must compete with full relevant BBC categories and
   # Channel 4's index, rather than just a handful of their home-page picks.
   with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
@@ -174,7 +208,7 @@ class Discovery:
   if cached and time.time()-cached[0]<600:return cached[1]
   rows=[];status={}
   with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-   futures={pool.submit(fn,query):name for name,fn in [('bbc',self.bbc_search),('u',self.u_search),('channel5',self.five_search)]}
+   futures={pool.submit(fn,query):name for name,fn in [('bbc',self.bbc_search),('u',self.u_search),('channel5',self.five_search)]+([('itv',self.itv_search)] if self.itv_enabled else [])}
    for future,name in futures.items():
     try:rows.extend(x for x in future.result() if x);status[name]='ready'
     except Exception:status[name]='temporarily unavailable'

@@ -77,6 +77,11 @@ class ProviderResolver:
     def licence(challenge):
      r=s.post(license_url,data=challenge,timeout=25);r.raise_for_status();return r.content
     headers={'Referer':'https://www.channel5.com/'}
+   elif provider=='itv':
+    from itv_provider import source
+    manifest,license_url,headers=source(self.root,s,episode)
+    def licence(challenge):
+     r=s.post(license_url,data=challenge,headers=headers,timeout=25);r.raise_for_status();return r.content
    elif provider=='u':
     vid=episode['provider_episode_id'];player='https://players.brightcove.net/1242911124001/0RyQs9qPh_default/index.html?videoId='+vid
     r=s.get(player,timeout=25);r.raise_for_status();policy=re.search(r'''policyKey\s*:\s*['"]([\w-]+)''',r.text)[1]

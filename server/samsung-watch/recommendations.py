@@ -54,7 +54,7 @@ def words(p):
  return {w for w in normal_title(p['title']+' '+str(p.get('description') or '')).split() if len(w)>2 and not w.isdigit() and w not in STOP}
 
 
-def taste(library):
+def taste(library,prefer_films=False):
  import math
  weights=collections.Counter();features=collections.Counter();terms=collections.Counter();media=collections.Counter()
  seeds=[p for p in library if not p.get('live') and not child_title(p) and (p.get('favourite') or p.get('recent') or p.get('resume_episode'))]
@@ -65,6 +65,7 @@ def taste(library):
   stamp=max([float(e.get('updated_at') or 0) for e in p.get('episodes',[])]+[0])
   if stamp:score+=3*math.exp(-max(0,time.time()-stamp)/(30*86400))
   if not score:continue
+  if prefer_films and p.get('film'):score*=4
   media['film' if p.get('film') else 'show']+=score
   for tag in tags(p):weights[tag]+=score
   for feature in formats(p):features[feature]+=score
@@ -110,9 +111,9 @@ def diverse_rank(scored,limit,provider_cap=None):
  return result
 
 
-def recommend(library,candidates,limit=16,genre=None,provider_cap=6,include_known=False,include_unmatched=False):
+def recommend(library,candidates,limit=16,genre=None,provider_cap=6,include_known=False,include_unmatched=False,prefer_films=False):
  import math
- weights,features,terms,media=taste(library)
+ weights,features,terms,media=taste(library,prefer_films=prefer_films)
  if genre:weights[genre]=max(weights.values(),default=5)
  maximum=max(weights.values(),default=1);feature_max=max(features.values(),default=1);term_max=max(terms.values(),default=1)
  known={normal_title(p['title']) for p in library if p.get('favourite') or p.get('recent')}
@@ -136,6 +137,7 @@ def recommend(library,candidates,limit=16,genre=None,provider_cap=6,include_know
   score+=min(0.5,text_match*0.4)
   if p.get('film') and media['show']>=media['film']*1.2:score*=0.25
   if 'Horror' in tags(p) and weights['Horror']<maximum*0.5:score*=0.3
+  if prefer_films and time.gmtime().tm_mon not in (11,12) and re.search(r'\b(christmas|festive)\b',normal_title(p['title'])):score*=0.45
   best_genre=next((g for g,_ in weights.most_common() if g in tags(p)),genre)
   row=dict(p);row['recommendation_reason']=p.get('popularity_source') or ('More '+best_genre.lower()+' for you' if best_genre else 'Matches your viewing')
   ranked.append((score,row))
@@ -225,3 +227,23 @@ def featured_films(library,day=None,limit=6):
    seen.add(p['id']);chosen.append(p);genres[genre]+=1;providers[provider]+=1
    if len(chosen)>=limit:return chosen
  return chosen
+
+
+def ranked_films(library):
+ """Taste-led film shelf; preserve every playable film and stable daily ties."""
+ import hashlib,datetime
+ films=[p for p in library if p.get('film') and not p.get('live')]
+ ranked=recommend(library,films,len(films),provider_cap=None,include_known=True,include_unmatched=True,prefer_films=True)
+ by_id={p['id']:p for p in films}
+ ranked=[by_id[p['id']] for p in ranked]
+ seen={p['id'] for p in ranked}
+ day=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+ # Explicit family editions and alternate cuts remain browsable, even when the
+ # recommendation engine omits them. Never drop films from their catalogue.
+ ranked+=sorted((p for p in films if p['id'] not in seen),key=lambda p:hashlib.sha256((day+p['id']).encode()).hexdigest())
+ def completed(p):
+  return any(e.get('completed') or float(e.get('progress') or 0)>=95 for e in p.get('episodes',[]))
+ continuing=sorted((p for p in ranked if p.get('resume_episode') and not completed(p)),key=activity,reverse=True)[:4]
+ seen={p['id'] for p in continuing}
+ remaining=[p for p in ranked if p['id'] not in seen]
+ return continuing+[p for p in remaining if not completed(p)]+[p for p in remaining if completed(p)]

@@ -1,6 +1,6 @@
 import time,unittest
 from unittest.mock import patch
-from recommendations import recommend,personal_shows,featured_shows,genre_order,diverse_rank
+from recommendations import recommend,personal_shows,featured_shows,genre_order,diverse_rank,ranked_films
 
 def show(n,provider='bbc',**kw):
  return {'id':f'{n:020x}','title':f'Show {n}','genres':['Comedy'],'brands':[{'id':provider,'name':provider}], 'episodes':[],**kw}
@@ -46,3 +46,24 @@ class PersonalRanking(unittest.TestCase):
   library += [show(99,film=True,hero='film',episodes=[{}])]
   result=featured_shows(library)
   self.assertEqual(len(result),6);self.assertEqual(len({p['id'] for p in result}),6);self.assertTrue(all(p['episodes'] and not p.get('film') for p in result))
+
+class FilmRanking(unittest.TestCase):
+ def test_taste_beats_alphabetical_and_genre_filter_keeps_order(self):
+  seed=show(100,title='Favourite comedy',favourite=True)
+  films=[show(1,title='A horror',film=True,genres=['Horror']),show(2,title='Z comedy',film=True),show(3,title='Another comedy',film=True)]
+  rows=ranked_films([seed]+films)
+  self.assertIn(rows[0]['id'],{show(2)['id'],show(3)['id']})
+  self.assertEqual(rows[-1]['id'],show(1)['id'])
+  self.assertEqual([p['id'] for p in rows if 'Comedy' in p['genres']], [p['id'] for p in rows[:2]])
+ def test_out_of_season_christmas_does_not_dominate_comedy_films(self):
+  with patch('recommendations.time.gmtime',return_value=time.struct_time((2026,10,29,0,0,0,0,0,0))):
+   films=[show(1,title='A Christmas Comedy',film=True),show(2,title='Another Comedy',film=True)]
+   self.assertEqual(ranked_films([show(100,favourite=True)]+films)[0]['id'],show(2)['id'])
+ def test_all_films_retained_including_family_and_alternate_editions(self):
+  films=[show(1,title='One',film=True,favourite=True),show(2,title='One (Signed)',film=True),show(3,title='Kids',film=True,genres=['Children'])]
+  self.assertEqual({p['id'] for p in ranked_films(films)},{p['id'] for p in films})
+ def test_resume_first_completed_last_and_stable(self):
+  films=[show(1,film=True,episodes=[{'progress':98}]),show(2,film=True),show(3,film=True,resume_episode='e3',episodes=[{'id':'e3','updated_at':10,'progress':40}])]
+  rows=ranked_films(films)
+  self.assertEqual([p['id'] for p in rows],[show(3)['id'],show(2)['id'],show(1)['id']])
+  self.assertEqual(rows,ranked_films(films))

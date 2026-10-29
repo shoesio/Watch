@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync(__dirname+'/probe.js','utf8');
+const calls=[],window={location:{pathname:'/mtd_rwcommon/widgets/user/SamsungWatch/index.html'},curWidget:{id:'SamsungWatch'},addEventListener(){}};
+vm.runInNewContext(source,{window,document:{},Image:function(){}});
+const device={GetProfile(id){calls.push(id);return {0:'',3:'0',4:'10',7:'1'}[id]},SetProfile(){throw Error('A write must never be attempted');}};
+const native={GetFirmware(){return 'T-MX10PMDEUC-1013.0'},GetModelCode(){return 'LT27B551'}};
+const report=window.WatchBootProbe.collect(device,native);
+assert.deepEqual(calls,[0,3,4,7]);assert.equal(report.firmware.value,'T-MX10PMDEUC-1013.0');assert.equal(report.profiles.autoboot.value,'0');
+assert.equal(report.widget_id,'SamsungWatch');assert.equal(report.mode,'read-only');assert.ok(!calls.includes(1));assert.ok(!calls.includes(2));
+const rejected=window.WatchBootProbe.collect({GetProfile(){throw Error('denied');}},{GetFirmware(){return -1;}});
+assert.equal(rejected.profiles.ticker_id.state,'unavailable');assert.equal(rejected.firmware.value,'-1');
+assert.equal(window.WatchBootProbe.collect(null,null).firmware.state,'missing-plugin');
+console.log('PASS: only four startup profile reads; no setters, PIN or device identity reads; denied/missing API handled.');

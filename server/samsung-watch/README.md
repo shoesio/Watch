@@ -1,3 +1,25 @@
+For the confirmed native startup method, see the [Auto Ticker setup and recovery guide](../../samsung/AUTOSTART.md).
+
+## Playback polish 0.327
+
+The owner traced the pale video to an LCD setting on the TV. Remove the temporary opaque panels and their added padding, restore the soft playback gradient, and remove the Info-button graphics diagnostic. Native playback, resume and autostart registration are unchanged.
+
+Playback information and the transport return to their original safe-area edges. The startup heading, logo and brand row share the screen centre; fixed text widths no longer overflow a padded parent. Provider marks have a matching row height/line height, trailing logo/button margins are removed, and transport labels have an explicit line height and vertical alignment.
+
+Four widget checks pass. A computed-style check verifies transparent panels, no padding offsets and a shared central axis. The Pi installer offers 0.327, built from the deployed 0.325 package with all assets outside playback code/styles/markup and version preserved byte-for-byte. App identity remains SamsungWatch; startup profiles were not changed and no playback services were restarted. Synchronise user applications from 192.168.0.146 and reopen Watch for the physical visual check.
+
+## Playback graphics test 0.322
+
+The user confirmed that 0.321 did not resolve the pale picture. Version 0.322 removes the full-screen playback shade element entirely, clears startup artwork before invoking native Play, explicitly clears root backgrounds and uses dark panels only behind controls and programme information.
+
+During playback, Info toggles the HTML graphics surface to zero opacity without stopping or seeking the source; Info again or another playback key restores it. This is a physical-TV diagnostic to distinguish the graphics surface from the video source/TV rendering. Return still closes normally. Four widget checks pass, including removal of the shade and the Info toggle preserving native playback calls and position. The installer at 192.168.0.146 offers 0.322. Physical confirmation remains necessary; 0.321 is retained as a rollback.
+
+## Playback overlay update 0.321
+
+The startup image is removed as soon as the native player reports buffering complete, with playback-time updates retained as a fallback. Clearing artwork detaches the image element, removes its source and load handlers, and replaces it with an empty hidden element so a late load cannot restore the old graphic over video. Closing playback clears the image as well; reconnecting still holds the native video frame.
+
+Four widget checks passed, including a regression check for image removal and late image callbacks. The Pi installation server offers 0.321 at 1080p. Synchronise user applications from 192.168.0.146 and reopen Watch to install. The pale-overlay fix still needs confirmation on the physical Samsung. Publishing the package did not restart playback services.
+
 # SamsungWatch 2.3 · release 0.230
 
 The installer at 192.168.0.146 now offers the 1080p 0.230 update. Synchronise user applications and reopen SamsungWatch. The user confirmed that the previous 1080p build looks excellent; this release retains that drawing mode.

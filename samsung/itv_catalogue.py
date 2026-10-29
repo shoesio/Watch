@@ -1,4 +1,4 @@
-"""Public ITVX catalogue/live metadata. Account and licence traffic stays on Apple TV."""
+"""Public ITVX catalogue/live metadata. Account and playback requests use separate provider adapters."""
 import concurrent.futures,datetime,html,json,re,time
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo

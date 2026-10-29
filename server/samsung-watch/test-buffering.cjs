@@ -24,14 +24,29 @@ w.XMLHttpRequest=function(){
 };
 const player=w.document.getElementById('player');
 for(const fn of ['Play','Pause','Stop','Resume','SetDisplayArea'])player[fn]=(...args)=>{native.push([fn,...args]);return 1};
+const stylesheet=w.document.createElement('style');stylesheet.textContent=fs.readFileSync(path.join(root,'watch.css'),'utf8');w.document.head.appendChild(stylesheet);
 w.eval(fs.readFileSync(path.join(root,'watch.js'),'utf8'));
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
 (async()=>{
  w.Watch.init();await wait(20);press(13);await wait(10);press(13);await wait(10);press(13);await wait(30);
- assert.equal(w.document.getElementById('preloadPhoto').style.display,'block');
- w.Watch.buffered();assert.equal(w.document.getElementById('preloadPhoto').style.display,'block');
- w.Watch.tick(1000);assert.equal(w.document.getElementById('preloadPhoto').style.display,'none');w.Watch.tick(121000);
+ const oldPoster=w.document.getElementById('preloadPhoto'), lateLoad=oldPoster.onload;
+ assert.equal(oldPoster.style.display,'none');assert.equal(oldPoster.hasAttribute('src'),false);
+ w.Watch.buffered();
+ const clearedPoster=w.document.getElementById('preloadPhoto');
+ assert.notEqual(clearedPoster,oldPoster);assert.equal(oldPoster.isConnected,false);
+ assert.equal(clearedPoster.style.display,'none');assert.equal(clearedPoster.hasAttribute('src'),false);
+ if(lateLoad)lateLoad();assert.equal(clearedPoster.style.display,'none');
+ w.Watch.tick(1000);w.Watch.tick(121000);
+ assert.ok(w.document.getElementById('pauseShade'));
+ assert.equal(w.getComputedStyle(w.document.getElementById('pauseInfo')).padding,'0px');
+ assert.equal(w.getComputedStyle(w.document.getElementById('playbackHelp')).padding,'0px');
+ assert.equal(w.getComputedStyle(w.document.getElementById('pauseInfo')).backgroundColor,'rgba(0, 0, 0, 0)');
+ assert.equal(w.getComputedStyle(w.document.getElementById('playbackHelp')).backgroundColor,'rgba(0, 0, 0, 0)');
+ const callsBeforeClean=native.length, positionBeforeClean=w.document.getElementById('timeLabel').textContent;
+ press(457);assert.notEqual(w.document.documentElement.style.opacity,'0');assert.equal(native.length,callsBeforeClean);
+ assert.equal(w.document.getElementById('timeLabel').textContent,positionBeforeClean);
+
  // Committing a scrub keeps the frozen player visible throughout delayed preparation.
  const pausesBefore=native.filter(c=>c[0]==='Pause').length;
  press(38);assert.equal(w.document.getElementById('playbackHelp').className,'timeline-focus');press(39);press(8);assert.equal(w.document.getElementById('playbackHelp').className,'');assert.equal(w.document.getElementById('control1').textContent,'Pause');assert.equal(native.filter(c=>c[0]==='Pause').length,pausesBefore);
@@ -40,7 +55,7 @@ const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
  await wait(30);assert.equal(w.document.getElementById('shell').style.display,'none');assert.equal(w.document.getElementById('playback').style.display,'block');assert.equal(prepares.at(-1).start_position,141);assert.equal(w.document.body.getAttribute('data-player-open'),'true');assert.equal(w.document.getElementById('bufferSpinner').textContent,'');
  // Late completion from the stream being replaced must not close the player.
  w.Watch.ended();assert.equal(w.document.getElementById('shell').style.display,'none');
- holding=false;await wait(30);assert.equal(w.document.getElementById('preloadPhoto').style.display,'none');w.Watch.ended();assert.equal(w.document.getElementById('shell').style.display,'none');w.Watch.tick(1000);w.Watch.tick(2000);w.Watch.buffered();assert.equal(w.document.getElementById('bufferSpinner').style.display,'none');assert.equal(w.document.getElementById('shell').style.display,'none');
+ holding=false;await wait(30);w.Watch.ended();assert.equal(w.document.getElementById('shell').style.display,'none');w.Watch.tick(1000);w.Watch.tick(2000);w.Watch.buffered();assert.equal(w.document.getElementById('bufferSpinner').style.display,'none');assert.equal(w.document.getElementById('shell').style.display,'none');
  w.Watch.buffering();
  assert.equal(w.document.getElementById('shell').style.display,'none');assert.equal(w.document.getElementById('bufferSpinner').style.display,'block');
  failing=true;w.Watch.failed();await wait(120);

@@ -65,3 +65,18 @@ html,body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .channelCornerLogo{display:block;width:auto;height:auto;max-width:56px;max-height:30px;margin:auto}#heroControls #nav16{width:65px;font-size:15px}
 
 .channelMark{width:auto;height:auto;max-width:110px;max-height:32px}.card.channel .cardSynopsis{height:32px}
+
+#playback.preloading #pauseInfo{left:200px;bottom:145px;width:880px;text-align:center;opacity:1}#playback.preloading #playingBrands{text-align:center}#playback.preloading #playingLogo{margin:12px auto 18px;max-width:640px;max-height:140px}#playback.preloading #playingShow,#playback.preloading #playingTitle{width:880px;max-width:880px}#playback.preloading #playingDescription{width:880px;max-height:81px;margin:10px auto;font-size:20px;line-height:27px}#playback.preloading #pauseShade{background:-webkit-linear-gradient(top,rgba(0,0,0,.06) 15%,rgba(0,0,0,.88) 100%);background:linear-gradient(to bottom,rgba(0,0,0,.06) 15%,rgba(0,0,0,.88) 100%)}#playback.preloading #playbackHelp{display:none}#playback.preloading #bufferSpinner{top:auto;bottom:55px}#playback.preloading #spinnerRing{width:36px;height:36px;border-width:3px}
+
+/* Floating playback controls share the original safe-area edges. */
+#pauseInfo{padding:0;background:transparent;border-radius:0}
+#playbackHelp{padding:0;background:transparent;border-radius:0}
+#playingBrands{height:32px;line-height:32px;font-size:0}
+#playingBrands .brandLogo:last-child{margin-right:0}
+#playingBrands .channelMark:first-child{margin-left:0}
+#playback.preloading #playingBrands{width:100%}
+#playback.preloading #playingLogo{margin-left:auto;margin-right:auto}
+#playback.preloading #playingShow,#playback.preloading #playingTitle,#playback.preloading #playingDescription{width:100%;max-width:100%}
+#transport span{line-height:24px;vertical-align:middle;text-align:center}
+
+#transport span:last-child{margin-right:0}

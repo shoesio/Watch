@@ -11,6 +11,10 @@ Watch brings a shared television library to Apple TV, Home Assistant and Samsung
 
 This repository groups the existing components without changing the running installation. The server folder preserves the installed directory names and imports. Component READMEs describe their existing configuration and operation; paths and network addresses in examples reflect the original Pi installation and should be adapted for another host.
 
+## Samsung Auto Ticker autostart
+
+Watch now has a confirmed native autostart route on the Samsung T27B551 with firmware 1013.0. It uses two TVMW profile settings while keeping the app as an ordinary `ticker=n` widget. Read the [exact setup, verification and recovery guide](samsung/AUTOSTART.md) before reproducing it. Samsung release 0.327 also restores transparent playback controls and corrects alignment.
+
 ## Getting started
 
 1. Read [the Pi host guide](server/README.md) and configure the three services using their `settings.example.json` files.
@@ -22,7 +26,7 @@ This repository groups the existing components without changing the running inst
 
 Imported on 29 October 2026. Server runtime files were read from the Pi, with local source bundles supplying project assets, documentation and tests. The Samsung widget was also read from the Pi. The Apple TV Xcode project and Home Assistant source came from the existing development workspace. The dashboard YAML matches the installed Watch dashboard.
 
-Development continues in the original workspace, so subsequent edits there are not automatically committed here. This is a source snapshot, not an automated deployment or synchronisation system.
+The initial import was a source snapshot; subsequent Samsung updates and the native autostart investigation are now tracked here. Repository changes are not automatically deployed to the Pi. The paired TV packages and installation state remain private to the host.
 
 ## Private configuration
 

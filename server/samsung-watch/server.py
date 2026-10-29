@@ -27,14 +27,14 @@ from tmdb_logos import sync as sync_logos, is_film
 from library_browse import genres, episode_order, natural
 from episode_versions import versions, QualityStore, seconds
 
-ART_HOSTS = {'ichef.bbci.co.uk', 'ic.c4assets.com', 'uktv-res.cloudinary.com', 'api-images.channel5.com'}
+ART_HOSTS = {'ichef.bbci.co.uk', 'ic.c4assets.com', 'uktv-res.cloudinary.com', 'api-images.channel5.com','ovp.itv.com'}
 LIVE_ORDER = {'bbc one':1,'bbc two':2,'channel 4':3,'bbc four':4,'e4':5,'more4':6,'film4':7,'4seven':8,'bbc news':9}
 CHANNEL_ART = {'bbc one':'bbcone','bbc two':'bbctwo','bbc four':'bbcfour','bbc news':'bbcnews',
                'channel 4':'channel4','e4':'e4','more4':'more4','film4':'film4','4seven':'4seven'}
 GUIDE_KEY = {'channel4':'C4','e4':'E4','more4':'M4','film4':'F4','4seven':'4S'}
 
 def provider_brands(names):
-    mapping = {'BBC iPlayer': 'bbc', 'Channel 4': 'channel4', 'U': 'u', 'Channel 5': 'channel5'}
+    mapping = {'BBC iPlayer': 'bbc', 'Channel 4': 'channel4', 'U': 'u', 'Channel 5': 'channel5', 'ITVX':'itv'}
     return [{'id': mapping[n], 'name': n} for n in names if n in mapping]
 
 def stream_spec(info):
@@ -191,7 +191,7 @@ class Gateway:
         return {k: v for k, v in item.items() if not k.startswith('_')}
 
     def suggestion_library(self):
-        return [dict(self.public(p),artwork=p.get('hero') or p.get('image'),episodes=[{'duration_seconds':seconds(e.get('duration_seconds')),'updated_at':self.progress_record(e['id']).get('updated_at',0)} for e,_ in p['_episodes']]) for p in self.library()]
+        return [dict(self.public(p),artwork=p.get('hero') or p.get('image'),episodes=[{'duration_seconds':seconds(e.get('duration_seconds')),'updated_at':self.progress_record(e['id']).get('updated_at',0),'completed':self.progress_record(e['id']).get('completed',False),'progress':(self.progress_record(e['id']).get('position',0)/seconds(e.get('duration_seconds'))*100) if seconds(e.get('duration_seconds')) else 0} for e,_ in p['_episodes']]) for p in self.library()]
 
     def discovery_card(self,p):
         if not p.get('discovery_ref'):return self.public(p)
@@ -241,7 +241,7 @@ class Gateway:
 
     async def import_show(self,request):
         data=await request.json();ref=data.get('ref','')
-        if not isinstance(ref,str) or not re.fullmatch(r'(bbc|channel4|u|channel5):[A-Za-z0-9_-]{1,120}',ref):raise web.HTTPBadRequest()
+        if not isinstance(ref,str) or not re.fullmatch(r'(bbc|channel4|u|channel5|itv):[A-Za-z0-9_-]{1,120}',ref):raise web.HTTPBadRequest()
         try:
             raw=await asyncio.to_thread(self.discovery.import_show,ref)
             # Retain the Samsung's proven compatible rendition policy.
@@ -293,8 +293,11 @@ class Gateway:
         tab = request.query.get('tab', '0')
         items = self.library()
         items = [p for p in items if p['live'] == (tab == '2')]
+        film_order={}
         if tab == '3':
-            items = [p for p in items if p['film']]
+            from recommendations import ranked_films
+            film_order={p['id']:i for i,p in enumerate(ranked_films(self.suggestion_library()))}
+            items = [dict(p,film_rank=film_order.get(p['id'],99999)) for p in items if p['film']]
         elif tab in ('0','1'):
             items = [p for p in items if not p['film'] or (tab == '0' and (p['recent'] or p['favourite']))]
         from recommendations import genre_order
@@ -306,6 +309,8 @@ class Gateway:
             items = [p for p in items if selected_genre in p['genres']]
         if tab == '0':
             items.sort(key=lambda p: (-max(p.get('updated_at',0),p.get('favourite_at',0)),not p['favourite'],not p['recent'],p['title'].casefold()))
+        elif tab == '3':
+            items.sort(key=lambda p:p['film_rank'])
         elif tab == '2':
             items.sort(key=lambda p: (LIVE_ORDER.get(p['title'].casefold(), 1000), p['title'].casefold()))
         else:
@@ -474,12 +479,18 @@ class Gateway:
                 'episode_id': episode.get('_progress_id',episode['id']), 'start_position': episode.get('_start_offset', 0), 'duration_seconds': duration,
                 'brands': provider_brands([programme.get('provider','')]),
                 'show_title': programme.get('title', episode['title']),
+                'art':self.art_id(episode.get('thumbnail') or programme.get('hero') or programme.get('artwork')),
                 'description': episode.get('description') or programme.get('description', ''),
                 'season': str(episode.get('season') or ''), 'episode_number': episode.get('episode_number', 0),
                 'show_logo': logo_id if logo_id and (self.show_logo_dir / (logo_id + '.png')).is_file() else None,
                 'spec': stream_spec(prepared['info']),
                 'url': self.settings['public_base'].rstrip('/') + '/media/' + ticket + ('/stream.ts' if prepared['live'] else '/stream.mp4'),
                 'live': bool(episode.get('live'))}
+            if episode.get('live'):
+                channel=next((p for p in self.library() if p.get('episode_id')==episode['id']),None)
+                if channel:
+                    now=channel.get('guide',{}).get('now') or {}
+                    self.jobs[job].update(title=now.get('title') or channel['title'],show_title=channel['title'],description=now.get('subtitle') or now.get('description') or '',channel_brand=channel.get('channel_brand'),art=now.get('art') or channel.get('hero') or channel.get('image'))
         except Exception:
             # Provider exceptions may contain signed URLs or private credentials.
             if self.current_job == job:
