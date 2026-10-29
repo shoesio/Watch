@@ -1,0 +1,6 @@
+{
+  "name": "samsung-watch-component-check",
+  "private": true,
+  "scripts": {"test": "node test-widget.cjs"},
+  "devDependencies": {"jsdom": "^27.0.0"}
+}

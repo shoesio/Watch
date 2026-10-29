@@ -1,0 +1,14 @@
+{
+  "ha_url": "http://127.0.0.1:8123",
+  "ha_token_file": "/home/jhewes/tv-favourites-private/ha-token",
+  "public_base": "http://192.168.0.146:8109",
+  "bind": "192.168.0.146",
+  "port": 8109,
+  "catalogue": "catalogue.json",
+  "cache_dir": "cache",
+  "plugin_options_file": "/home/jhewes/tv-favourites-private/streamlink-options.json",
+  "max_vod_bytes": 1073741824,
+  "prepare_timeout": 240,
+  "frontend_origin": "http://192.168.0.146:8123",
+  "private_root": "/home/jhewes/tv-favourites-private"
+}

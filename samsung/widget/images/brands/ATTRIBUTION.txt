@@ -1,0 +1,10 @@
+BBC iPlayer 2021 symbol: British Broadcasting Corporation; vectorisation credited to CillBill, uploaded by Yayan550.
+Source: https://commons.wikimedia.org/wiki/File:BBC_iPlayer_2021_(symbol).svg
+Licence shown by source: CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/
+Changes: rendered from SVG to transparent PNG at 240px height. This derivative asset is distributed under CC BY-SA 4.0. BBC trademarks remain with their owner.
+Channel 4 and U logos identify their respective programme providers; source paths are retained in the original provider branding assets/workflow.
+
+TMDB approved blue short logo: https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+Channel 5 mark: unmodified official website app icon, https://www.channel5.com/my5_192.png. Channel 5 trademark.

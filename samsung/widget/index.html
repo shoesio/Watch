@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=1280, user-scalable=no">
+<title>Watch</title>
+<link rel="stylesheet" href="watch.css">
+<script src="$MANAGER_WIDGET/Common/API/Widget.js"></script>
+<script src="$MANAGER_WIDGET/Common/API/TVKeyValue.js"></script>
+<script src="connection.js"></script><script src="preview.js"></script><script src="watch.js"></script>
+</head><body onload="Watch.init()" onunload="Watch.shutdown()">
+<object id="player" classid="clsid:SAMSUNG-INFOLINK-PLAYER" style="position:absolute;width:0;height:0"></object>
+<div id="shell">
+ <div id="hero"><img id="heroImage" alt=""><div id="heroShade"></div><div id="heroBottom"></div>
+  <div id="heroText"><div id="heroBrands"></div><div id="eyebrow">Your library</div><img id="showLogo" alt="" style="display:none"><h1 id="title">Welcome home.</h1><p id="description">Connecting to your programmes on the Pi…</p></div>
+ </div>
+ <div id="navigation"><span id="nav0">For you</span><span id="nav1">Shows</span><span id="nav8">Films</span><span id="nav2">Live TV</span><span id="nav9">Search</span><span id="nav10">Discover</span><span id="nav11" style="display:none">Similar</span><span id="nav12" style="display:none">Favourite</span><span id="nav13" style="display:none">Featured</span><b id="pageLabel"></b><span id="nav7">Genre: All</span></div>
+ <div id="heroControls" style="display:none"><span id="nav14">‹</span><b id="heroCount"></b><span id="nav16">Open</span><span id="nav15">›</span></div><div id="cards"></div>
+ <div id="footer"><span id="status">Starting…</span><span id="hint">Arrows · Browse &nbsp; OK · Open &nbsp; Return · Navigation &nbsp; Info · About</span></div>
+</div>
+<div id="playback"><img id="preloadPhoto" alt=""><div id="pauseShade"></div><div id="bufferSpinner" style="display:none"><div id="spinnerRing"></div></div><div id="pauseInfo"><div id="playingBrands"></div><img id="playingLogo" alt="" style="display:none"><div id="playingShow"></div><div id="playingEpisode"></div><div id="playingTitle"></div><p id="playingDescription"></p></div><div id="playbackStatus">Preparing…</div><div id="playbackHelp"><div id="timeLabel">0:00</div><div id="remainingLabel"></div><div id="timeline"><div id="timelineFill"></div><div id="timelineDot"></div></div><div id="transport"><span id="control1">Pause</span><span id="control3">Start over</span></div><div id="transportHint">Up · Timeline &nbsp; Arrows · Select &nbsp; OK · Activate &nbsp; Return · Save and close</div></div></div><div id="qualityBadge"></div>
+<div id="searchMenu" style="display:none"><h2>Search programmes</h2><div id="searchQuery"></div><div id="searchKeys"></div><p>Arrows · Choose &nbsp; OK · Type &nbsp; Return · Close</p></div>
+<div id="genreMenu" style="display:none"><h2 id="genreHeading">Filter shows</h2><div id="genreChoices"></div><p>Arrows · Choose &nbsp; OK · Filter &nbsp; Return · Close</p></div>
+<div id="credits" style="display:none"><h1>About</h1><p id="appVersion"></p><img src="images/brands/tmdb.png" alt="TMDB"><p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p><p>Programme logos and metadata: The Movie Database<br>www.themoviedb.org</p><p>OK or Return · Close</p></div>
+<a id="remote" href="javascript:void(0)" onkeydown="return Watch.key(event)" style="position:absolute;left:-100px">Remote</a>
+</body></html>

@@ -1,0 +1,21 @@
+[Unit]
+Description=Home Assistant TV favourites with Streamlink
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jhewes
+WorkingDirectory=/home/jhewes/tv-favourites
+ExecStart=/home/jhewes/tv-favourites-venv/bin/python /home/jhewes/tv-favourites/bridge.py --config settings.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/jhewes/tv-favourites /home/jhewes/tv-favourites-private /home/jhewes/.cache/streamlink
+
+[Install]
+WantedBy=multi-user.target

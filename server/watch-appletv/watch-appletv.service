@@ -1,0 +1,15 @@
+[Unit]
+Description=Watch Apple TV gateway (isolated local playback)
+After=network-online.target tv-favourites.service
+Wants=network-online.target
+[Service]
+User=jhewes
+WorkingDirectory=/home/jhewes/watch-appletv
+ExecStart=/home/jhewes/tv-favourites-venv/bin/python /home/jhewes/watch-appletv/server.py --config /home/jhewes/watch-appletv/settings.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

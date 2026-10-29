@@ -1,0 +1,9 @@
+title: Watch
+views:
+  - title: Watch
+    path: watch
+    icon: mdi:television-play
+    type: panel
+    cards:
+      - type: custom:tv-favourites-card
+        entity: sensor.tv_favourites

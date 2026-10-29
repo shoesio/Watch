@@ -1,0 +1,7 @@
+aiohttp>=3.12,<4
+streamlink==8.6.2
+PyYAML>=6,<7
+requests>=2.32,<3
+pywidevine==1.9.0
+pycryptodome>=3.20,<4
+Pillow>=10

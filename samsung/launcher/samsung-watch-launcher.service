@@ -1,0 +1,16 @@
+[Unit]
+Description=Open Watch after Samsung power-on
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=jhewes
+WorkingDirectory=/home/jhewes/samsung-watch/launcher
+ExecStart=/home/jhewes/tv-favourites-venv/bin/python /home/jhewes/samsung-watch/launcher/launch.py --config /home/jhewes/samsung-watch/launcher/settings.json
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {JSDOM}=require('jsdom'),root=path.join(__dirname,'widget');
+const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{runScripts:'outside-only',url:'http://fixture.local/'}),w=dom.window;
+let calls=[],delayImport=false;
+const base={id:'show',title:'Programme',description:'Actual synopsis',brands:[{id:'bbc',name:'BBC iPlayer'}],genres:['Comedy'],image:'image',hero:'image',film:false};
+w.WATCH_CONNECTION={base:'http://pi',key:'fixture'};
+w.Common={API:{Widget:function(){this.sendReadyEvent=()=>{};this.blockNavigation=()=>{};this.sendReturnEvent=()=>{}},TVKeyValue:function(){}}};
+w.XMLHttpRequest=function(){
+ this.open=(method,url)=>{this.method=method;this.url=url};this.setRequestHeader=()=>{};this.abort=()=>{};
+ this.send=body=>{calls.push({method:this.method,url:this.url,body});let data={ok:true};
+ if(this.url.includes('/api/library'))data=this.url.includes('tab=2')?{items:[{...base,id:'live',title:'BBC One',live:true,channel_brand:'bbcone',guide:{now:{title:'Current programme',subtitle:'Live programme synopsis'},next:{title:'Next programme',time:'15:00'}}}],total:1,page:0,genres:[]}:{items:[{...base,progress:25}],total:1,page:0,genres:['Comedy']};
+ else if(this.url.includes('mode=highlights'))data={items:Array.from({length:6},(_,i)=>({...base,id:'highlight'+i,title:'Highlight '+i})),total:6,page:0};
+ else if(this.url.includes('/api/suggestions'))data={items:[{...base,id:'discovered',discovery_ref:'bbc:abc'}],total:1,page:0,snapshot:'snapshot1',genres:['Comedy']};
+ else if(this.url.endsWith('/api/import'))data={...base,id:'imported'};
+ else if(this.url.includes('/api/seasons/'))data={items:[{id:'all',title:'All episodes'}],total:1,page:0};
+ else if(this.url.includes('/api/episodes/'))data={items:[{id:'episode',title:'Episode'}],total:1,page:0};
+ else if(this.url.endsWith('/api/favourite'))data={ok:true,favourite:true};
+ this.status=200;this.readyState=4;this.responseText=JSON.stringify(data);w.setTimeout(()=>this.onreadystatechange(),this.url.endsWith('/api/import')&&delayImport?60:0);
+ };
+};
+w.eval(fs.readFileSync(path.join(root,'watch.js'),'utf8'));
+const wait=ms=>new Promise(r=>setTimeout(r,ms)),press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
+(async()=>{
+ w.Watch.init();await wait(30);
+ assert.equal(w.document.getElementById('heroCount').textContent,'1 / 6');
+ assert.equal(w.document.querySelector('.cardSynopsis').textContent,'Actual synopsis');assert.equal(w.document.querySelector('.cardProgress div').style.width,'25%');
+ press(8);for(let i=0;i<20;i++)press(39);press(13);assert.equal(w.document.getElementById('heroCount').textContent,'2 / 6');
+ press(37);press(13);await wait(20);assert.equal(w.document.getElementById('heroControls').style.display,'none');assert.equal(w.document.getElementById('nav7').style.display,'none');
+ press(8);await wait(25);press(8);for(let i=0;i<20;i++)press(37);press(39);press(39);press(39);press(13);await wait(25);
+ assert.equal(w.document.querySelector('.cardSynopsis').textContent,'Live programme synopsis');assert.ok(w.document.querySelector('.channelCornerLogo').src.endsWith('/images/marks/bbcone.png'));
+ w.Watch.shutdown();dom.window.close();console.log('PASS: six For You highlights, hero controls/open, synopsis retained with progress, live synopsis and transparent mark.');
+})().catch(e=>{console.error(e);dom.window.close();process.exitCode=1});

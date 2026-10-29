@@ -1,0 +1,9 @@
+{
+  "bridge_root": "/home/jhewes/tv-favourites",
+  "bridge_config": "/home/jhewes/tv-favourites/settings.json",
+  "device_key_file": "/home/jhewes/tv-favourites-private/samsung-watch-key",
+  "allowed_clients": ["192.168.0.123", "127.0.0.1"],
+  "public_base": "http://192.168.0.146:8113",
+  "bind": "0.0.0.0",
+  "port": 8113
+}

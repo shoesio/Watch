@@ -1,0 +1,36 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {JSDOM}=require('jsdom'),root=path.join(__dirname,'widget');
+const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{runScripts:'outside-only',url:'http://fixture.local/'}),w=dom.window;
+let calls=[],delayImport=false;
+const base={id:'show',title:'Programme',description:'Actual synopsis',brands:[{id:'bbc',name:'BBC iPlayer'}],genres:['Comedy'],image:'image',hero:'image',film:false};
+w.WATCH_CONNECTION={base:'http://pi',key:'fixture'};
+w.Common={API:{Widget:function(){this.sendReadyEvent=()=>{};this.blockNavigation=()=>{};this.sendReturnEvent=()=>{}},TVKeyValue:function(){}}};
+w.XMLHttpRequest=function(){
+ this.open=(method,url)=>{this.method=method;this.url=url};this.setRequestHeader=()=>{};this.abort=()=>{};
+ this.send=body=>{calls.push({method:this.method,url:this.url,body});let data={ok:true};
+ if(this.url.includes('/api/library'))data={items:[base],total:1,page:0,genres:['Comedy']};
+ else if(this.url.includes('/api/suggestions'))data={items:[{...base,id:'discovered',discovery_ref:'bbc:abc'}],total:1,page:0,snapshot:'snapshot1',genres:['Comedy']};
+ else if(this.url.endsWith('/api/import'))data={...base,id:'imported'};
+ else if(this.url.includes('/api/seasons/'))data={items:[{id:'all',title:'All episodes'}],total:1,page:0};
+ else if(this.url.includes('/api/episodes/'))data={items:[{id:'episode',title:'Episode'}],total:1,page:0};
+ else if(this.url.endsWith('/api/favourite'))data={ok:true,favourite:true};
+ this.status=200;this.readyState=4;this.responseText=JSON.stringify(data);w.setTimeout(()=>this.onreadystatechange(),this.url.endsWith('/api/import')&&delayImport?60:0);
+ };
+};
+w.eval(fs.readFileSync(path.join(root,'watch.js'),'utf8'));
+const wait=ms=>new Promise(r=>setTimeout(r,ms)),press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
+(async()=>{
+ w.Watch.init();await wait(20);press(8);for(let i=0;i<4;i++)press(39);press(13);
+ assert.equal(w.document.getElementById('searchMenu').style.display,'block');
+ press(13);press(39);press(13);for(let i=0;i<37;i++)press(39);press(13);await wait(30);
+ assert.ok(calls.some(c=>c.url.includes('mode=search')&&c.url.includes('q=AB')));
+ delayImport=true;press(13);assert.equal(w.document.getElementById('shell').style.display,'none');assert.equal(w.document.getElementById('preloadPhoto').style.display,'block');assert.equal(w.document.getElementById('bufferSpinner').textContent,'');
+ await wait(80);assert.equal(w.document.getElementById('shell').style.display,'block');assert.equal(w.document.getElementById('nav7').style.display,'none');
+ assert.equal(w.document.getElementById('nav11').style.display,'');assert.equal(w.document.getElementById('nav12').style.display,'');
+ press(38);for(let i=0;i<20;i++)press(39);press(13);await wait(15);assert.ok(calls.some(c=>c.url.endsWith('/api/favourite')&&JSON.parse(c.body).favourite));assert.equal(w.document.getElementById('nav12').textContent,'Unfavourite');
+ press(37);press(13);await wait(25);assert.ok(calls.at(-1).url.includes('mode=related'));assert.equal(w.document.getElementById('nav7').style.display,'none');
+ press(8);for(let i=0;i<20;i++)press(37);press(39);press(39);press(13);await wait(20);assert.equal(w.document.getElementById('nav13').style.display,'');
+ press(8);for(let i=0;i<20;i++)press(39);press(37);press(13);await wait(20);assert.ok(calls.some(c=>c.url.includes('mode=featured')));assert.equal(w.document.body.className,'');
+ assert.ok(!fs.readFileSync(path.join(root,'watch.css'),'utf8').includes('blur('));
+ w.Watch.shutdown();dom.window.close();console.log('PASS: remote search keyboard, provider import, sharp preload, durable favourite action, Similar, Featured and section filters.');
+})().catch(e=>{console.error(e);dom.window.close();process.exitCode=1});

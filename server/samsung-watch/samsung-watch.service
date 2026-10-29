@@ -1,0 +1,21 @@
+[Unit]
+Description=Watch library gateway for Samsung Smart Hub
+After=network-online.target tv-favourites.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jhewes
+WorkingDirectory=/home/jhewes/samsung-watch
+ExecStart=/home/jhewes/tv-favourites-venv/bin/python /home/jhewes/samsung-watch/server.py --config /home/jhewes/samsung-watch/settings.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/jhewes/tv-favourites/cache /home/jhewes/tv-favourites-private
+
+[Install]
+WantedBy=multi-user.target

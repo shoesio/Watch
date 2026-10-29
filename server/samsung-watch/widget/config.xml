@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget>
+    <ThumbIcon>icon106.png</ThumbIcon>
+    <BigThumbIcon>icon115.png</BigThumbIcon>
+    <ListIcon>icon85.png</ListIcon>
+    <BigListIcon>icon95.png</BigListIcon>
+
+    <category>Information</category>
+    <type>user</type>
+
+    <autoUpdate>n</autoUpdate>
+    <cpname />
+    <cpauthjs />
+
+    <ver>0.310</ver>
+    <mgrver>3.000</mgrver>
+
+    <fullwidget>y</fullwidget>
+    <srcctl>y</srcctl>
+    <ticker itemtype="boolean">n</ticker>
+    <childlock>n</childlock>
+    <audiomute>n</audiomute>
+    <videomute>n</videomute>
+    <dcont>y</dcont>
+    <network>y</network>
+
+    <widgetname>SamsungWatch</widgetname>
+    <description>Watch library and network video</description>
+
+    <width>1280</width>
+    <height>720</height>
+
+    <author>
+        <name>Punktfunk</name>
+        <email />
+        <link />
+        <organization />
+    </author>
+</widget>

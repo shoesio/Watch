@@ -1,0 +1,35 @@
+alias: TV favourites — play
+mode: parallel
+max: 3
+fields:
+  episode_id:
+    required: true
+    selector:
+      text:
+  endpoint_id:
+    required: true
+    selector:
+      text:
+  replace_current:
+    default: false
+    selector:
+      boolean:
+  request_id:
+    default: ""
+    selector:
+      text:
+  start_position:
+    default: 0
+    selector:
+      number:
+        min: 0
+        max: 86400
+        mode: box
+sequence:
+  - event: tv_favourites_request
+    event_data:
+      request_id: "{{ request_id | default('') }}"
+      episode_id: "{{ episode_id }}"
+      endpoint_id: "{{ endpoint_id }}"
+      replace_current: "{{ replace_current | default(false) | bool }}"
+      start_position: "{{ start_position | default(0) | float }}"

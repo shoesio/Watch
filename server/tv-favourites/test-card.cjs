@@ -1,0 +1,16 @@
+const path=require('path');const {JSDOM}=require('jsdom');const fs=require('fs');const assert=require('node:assert/strict');
+const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'http://localhost',runScripts:'outside-only'});const {window:w}=dom;
+w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};
+w.eval(fs.readFileSync(path.join(__dirname,'tv-favourites-card.js'),'utf8'));
+const card=w.document.createElement('tv-favourites-card');card.setConfig({entity:'sensor.tv_favourites'});w.document.body.append(card);
+const catalogue=JSON.parse(fs.readFileSync(path.join(__dirname,'catalogue.json'),'utf8'));const calls=[];const data={...catalogue,updated_at:Date.now()/1000,message:'Ready',endpoints:[{id:'small_samsung',name:'Small Samsung',available:true,busy:false},{id:'offline',name:'Offline display',available:false}]};
+const hass={states:{'sensor.tv_favourites':{state:'ready',attributes:data}},callService:async(...args)=>calls.push(args)};card.hass=hass;
+const root=card.shadowRoot;
+assert(root.querySelector('.hero h1').textContent.length>3);assert.equal(root.querySelector('.screen').value,'small_samsung');assert.equal(root.querySelectorAll('.screen option').length,3);assert(root.querySelectorAll('.rail').length>=2);assert(!root.textContent.includes('Big Buck Bunny'));
+root.querySelector('nav button.library').click();assert.equal(root.querySelectorAll('.catalogue-grid>.show').length,catalogue.programmes.filter(p=>!p.episodes.every(e=>e.live)).length);assert.equal(root.querySelector('.hero').hidden,true);
+const favourite=catalogue.programmes.find(p=>p.id==='c4_taskmaster-bleeped');card.details(favourite);assert(root.querySelector('.modal').open);assert(root.querySelectorAll('.season option').length>5);assert(root.querySelectorAll('.episode-list .episode-card').length>0);
+root.querySelector('.modal .close').click();assert.equal(root.querySelector('.modal').open,false);
+root.querySelector('nav button.live').click();assert(root.querySelectorAll('.guide-row').length>=1);
+const search=root.querySelector('.search');search.value='Taskmaster Bleeped';search.dispatchEvent(new w.Event('input'));assert(root.querySelector('.catalogue-grid').childElementCount>=1);
+search.value='<img src=x onerror=alert(1)>';search.dispatchEvent(new w.Event('input'));assert(root.querySelector('.empty'));assert.equal(root.querySelectorAll('img[src="x"]').length,0);
+(async()=>{card.query='';data.endpoints[0].busy=true;await card.play(favourite,favourite.episodes[0]);assert(root.querySelector('.confirm').open);assert.equal(calls.length,0);root.querySelector('.confirm .primary').click();await new Promise(r=>setTimeout(r,0));assert.equal(calls.length,1);assert.equal(calls[0][2].replace_current,true);assert.equal(calls[0][2].endpoint_id,'small_samsung');card.stale=true;await card.play(favourite,favourite.episodes[0]);assert.equal(calls.length,1);console.log('PASS: account-library rails, programme and series navigation, episode selection, search, unavailable-output hiding, busy-TV confirmation, safe text rendering, offline-playback guard.');w.close()})().catch(e=>{console.error(e);process.exit(1)});
