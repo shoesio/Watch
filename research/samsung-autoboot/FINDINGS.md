@@ -1,6 +1,6 @@
 # Samsung Watch autoboot investigation
 
-These are chronological investigation notes. For the current, reproducible instructions and confirmed limitations, use the [Auto Ticker guide](../../samsung/AUTOSTART.md). Early uncertainties below are superseded by the later hardware results. The current app release is 0.327; historical references to 0.323–0.326 describe the investigation packages. Raw reports and downloaded manuals are not committed.
+These are chronological investigation notes. For the current, reproducible instructions and confirmed limitations, use the [Auto Ticker guide](../../samsung/AUTOSTART.md). Early uncertainties below are superseded by the later hardware results. The current app release is 0.328; historical references to 0.323–0.326 describe the investigation packages. Raw reports and downloaded manuals are not committed.
 
 29 October 2026. Target: Samsung T27B551, T-MX10PMDEUC **1013.0**, confirmed by the owner. 1008.0 in the supplied historical notes is superseded. The owner has downloaded 1015.0 but has not installed it.
 

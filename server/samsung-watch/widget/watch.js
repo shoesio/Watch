@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.327', seekTransition = false;
+ var buildVersion = '0.328', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -122,7 +122,7 @@ var Watch = (function () {
    var picture = document.createElement('div'), brands = document.createElement('div');
    picture.className = 'picture'; brands.className = 'brands'; branding(brands, rows[i].brands);
    img = document.createElement('img'); var imageSource = rows[i].channel_brand ? artwork(rows[i], 'thumb') : image(rows[i].image, 'thumb'); img.alt = '';
-   cover(img, 210, pageSize === 8 ? 87 : 75, !!rows[i].channel_brand && !(rows[i].guide && rows[i].guide.now && rows[i].guide.now.art));
+   cover(img, 210, pageSize === 8 ? 105 : 93, !!rows[i].channel_brand && !(rows[i].guide && rows[i].guide.now && rows[i].guide.now.art));
    if (rows[i].channel_brand) { var channelBadge = document.createElement('div'), channelImage = document.createElement('img'); channelBadge.className = 'channelCorner';channelImage.className='channelCornerLogo'; channelImage.src = 'images/marks/' + rows[i].channel_brand + '.png'; channelImage.alt = rows[i].title;channelBadge.appendChild(channelImage);card.appendChild(channelBadge); }
    img.onerror = function () { this.onerror = null; this.style.visibility = 'hidden'; this.src = 'images/backdrop.png'; };
    img.src = imageSource; if (img.complete && img.naturalWidth) { img.onload(); }

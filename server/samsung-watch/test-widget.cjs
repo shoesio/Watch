@@ -38,7 +38,7 @@ const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
  const picture=w.document.querySelector('.card .picture img');assert.equal(picture.style.width,'280px');assert.equal(picture.style.visibility,'hidden');assert.ok(picture.src.includes('size=thumb'));
  Object.defineProperty(picture,'naturalWidth',{value:400});Object.defineProperty(picture,'naturalHeight',{value:800});picture.onload();
  assert.equal(picture.style.width,'280px');assert.equal(picture.style.height,'560px');
- assert.equal(picture.style.top,'-230px');assert.equal(picture.style.visibility,'visible');picture.onload();assert.equal(picture.style.width,'280px');assert.equal(picture.style.height,'560px');
+ assert.equal(picture.style.top,'-218px');assert.equal(picture.style.visibility,'visible');picture.onload();assert.equal(picture.style.width,'280px');assert.equal(picture.style.height,'560px');
  for(let i=0;i<4;i++)press(39);await wait(20);
  assert.equal(w.document.querySelectorAll('.card').length,4);
  assert.match(w.document.getElementById('pageLabel').textContent,/2 \/ 3/);

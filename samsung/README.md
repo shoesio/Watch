@@ -1,3 +1,11 @@
+## Card artwork and channel badges 0.328
+
+Channel logos, including the shorter BBC marks, now centre vertically and horizontally in their existing dark badges. The badge's line height matches its padded interior, with a zero-size text strut to avoid a font-baseline offset. Existing BBC PNGs have no asymmetric transparent padding.
+
+Four-card screens use 124px-high artwork (previously 100px) in 240px cards; library grids use 140px-high artwork (previously 116px) in 256px cards, with a 12px row gap. Image crops use the matching dimensions before loading, retain aspect ratio, and leave room for titles, descriptions, metadata, progress and the footer. These are 1280px source-layout dimensions; packaging scales them to 1080p as before.
+
+All four widget checks and the computed layout/badge checks pass. The installer at 192.168.0.146 offers 0.328. Packaging used 0.327 as its base and preserved every other asset, paired connection and app identity; startup profiles and running services were not changed. Synchronise and reopen Watch for the TV visual check.
+
 For the confirmed native startup method, see the [Auto Ticker setup and recovery guide](AUTOSTART.md).
 
 ## Playback polish 0.327

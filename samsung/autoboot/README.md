@@ -1,6 +1,6 @@
 # Native Samsung Watch autostart
 
-**Confirmed working on the T27B551 with T-MX10PMDEUC 1013.0.** The owner verified Watch launched automatically after a normal remote off/on cycle, with persistent TVMW readings `SamsungWatch` / `1`. The Pi's remote-button launcher remained disabled. The current normal Watch release is **0.327**; it retains the same app identity and does not write startup profiles.
+**Confirmed working on the T27B551 with T-MX10PMDEUC 1013.0.** The owner verified Watch launched automatically after a normal remote off/on cycle, with persistent TVMW readings `SamsungWatch` / `1`. The Pi's remote-button launcher remained disabled. The current normal Watch release is **0.328**; it retains the same app identity and does not write startup profiles.
 
 See **[the complete Auto Ticker setup and recovery guide](../AUTOSTART.md)** for the exact API calls, ordinary `ticker=n` manifest, model/runtime, readback checks, staged RED/GREEN trial, power-cycle test, package cleanup and limitations.
 

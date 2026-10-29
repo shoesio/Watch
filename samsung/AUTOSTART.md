@@ -57,19 +57,19 @@ The supplied [read-only probe](autoboot/probe.js), [explicit-action trial](autob
 
 The staging helper is run **on the Pi**. It takes the package currently offered by `widgetlist.xml` as its base, backs it and the install list up privately, preserves the paired connection and other assets, and refuses an existing output filename or an intervening installer change.
 
-For example, when the current app is 0.327 and these example version numbers are unused:
+For example, when the current app is 0.328 and these example version numbers are unused:
 
 ```sh
 cd /home/jhewes/samsung-watch/autoboot
 
 # Read-only report. Copy/save the report before the next step.
-/home/jhewes/tv-favourites-venv/bin/python stage.py --version 0.328
+/home/jhewes/tv-favourites-venv/bin/python stage.py --version 0.329
 
 # Explicit RED/GREEN controls; opening the app does not change profiles.
-/home/jhewes/tv-favourites-venv/bin/python stage.py --version 0.329 --trial
+/home/jhewes/tv-favourites-venv/bin/python stage.py --version 0.330 --trial
 
 # After the power-cycle test, remove both diagnostic scripts.
-/home/jhewes/tv-favourites-venv/bin/python stage.py --version 0.330 --remove-probe
+/home/jhewes/tv-favourites-venv/bin/python stage.py --version 0.331 --remove-probe
 ```
 
 These are **separate stages**, with a TV synchronisation and observation between each command. Choose fresh, increasing versions for the actual installer state. Do not run all three at once, publish an older version, or re-run this procedure just to install an ordinary Watch update. The example paths and LAN event-collector address in the scripts belong to this installation and need adapting for another host. The collector is supplied by the existing install server; the staging helper does not create it.
