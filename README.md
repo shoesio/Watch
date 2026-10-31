@@ -13,7 +13,7 @@ This repository groups the existing components without changing the running inst
 
 ## Samsung Auto Ticker autostart
 
-Watch now has a confirmed native autostart route on the Samsung T27B551 with firmware 1013.0. It uses two TVMW profile settings while keeping the app as an ordinary `ticker=n` widget. Read the [exact setup, verification and recovery guide](samsung/AUTOSTART.md) before reproducing it. Samsung release 0.328 includes transparent playback controls, centred channel badges and taller card artwork.
+Watch now has a confirmed native autostart route on the Samsung T27B551 with firmware 1013.0. It uses two TVMW profile settings while keeping the app as an ordinary `ticker=n` widget. Read the [exact setup, verification and recovery guide](samsung/AUTOSTART.md) before reproducing it. Samsung release 0.329 includes transparent playback controls, smaller consistent BBC channel marks, taller card artwork and a topical home row led by the latest unfinished episode.
 
 ## Getting started
 

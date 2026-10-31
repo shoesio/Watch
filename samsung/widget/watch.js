@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.328', seekTransition = false;
+ var buildVersion = '0.329', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -123,7 +123,7 @@ var Watch = (function () {
    picture.className = 'picture'; brands.className = 'brands'; branding(brands, rows[i].brands);
    img = document.createElement('img'); var imageSource = rows[i].channel_brand ? artwork(rows[i], 'thumb') : image(rows[i].image, 'thumb'); img.alt = '';
    cover(img, 210, pageSize === 8 ? 105 : 93, !!rows[i].channel_brand && !(rows[i].guide && rows[i].guide.now && rows[i].guide.now.art));
-   if (rows[i].channel_brand) { var channelBadge = document.createElement('div'), channelImage = document.createElement('img'); channelBadge.className = 'channelCorner';channelImage.className='channelCornerLogo'; channelImage.src = 'images/marks/' + rows[i].channel_brand + '.png'; channelImage.alt = rows[i].title;channelBadge.appendChild(channelImage);card.appendChild(channelBadge); }
+   if (rows[i].channel_brand) { var channelBadge = document.createElement('div'), channelImage = document.createElement('img'); channelBadge.className = 'channelCorner';channelImage.className='channelCornerLogo'+(/^bbc(one|two|four|news)$/.test(rows[i].channel_brand) ? ' bbcChannelLogo' : ''); channelImage.src = 'images/marks/' + rows[i].channel_brand + '.png'; channelImage.alt = rows[i].title;channelBadge.appendChild(channelImage);card.appendChild(channelBadge); }
    img.onerror = function () { this.onerror = null; this.style.visibility = 'hidden'; this.src = 'images/backdrop.png'; };
    img.src = imageSource; if (img.complete && img.naturalWidth) { img.onload(); }
    shade = document.createElement('div'); shade.className = 'shade';
@@ -218,6 +218,7 @@ var Watch = (function () {
   if (area==='hero') { selected=highlights[highlightFocus]; }
   if (!selected) { return; }
   if (selected.discovery_ref) { importProgramme(selected); return; }
+  if (!group && selected.home_episode) { start(selected); return; }
   if (!group && selected.film && selected.episode_id) { start(selected); return; }
   if (!group && !selected.live) {
    previous = {page: page, focus: focus, mode:browseMode, snapshot:browseSnapshot}; previousTab = tab; group = selected; choosingSeason = true; season = 'all'; loadPage(0);
@@ -308,7 +309,7 @@ var Watch = (function () {
  function start(item, startPosition, recovering) {
   if (!recovering) { retryCount = 0; }
   var programmeInfo=presentation(item);livePlayback=!!item.live || livePlayback;
-  if (!recoveringView) { livePlayback = !!item.live; selectedArtwork = rows[focus] ? artwork(rows[focus]) : ''; playerView(true); waiting = true; paintProgramme({show_title:programmeInfo.show_title || (group ? group.title : item.title),title:programmeInfo.title,description:programmeInfo.description,duration_seconds:item.duration_seconds,season:item.season,episode_number:item.episode_number,channel_brand:programmeInfo.channel_brand,show_logo:item.show_logo || (group && group.show_logo),brands:item.brands || (group && group.brands)});setPreload(selectedArtwork);overlay('Preparing'); }
+  if (!recoveringView) { livePlayback = !!item.live; selectedArtwork = (item.hero || item.image) ? artwork(item) : (rows[focus] ? artwork(rows[focus]) : ''); playerView(true); waiting = true; paintProgramme({show_title:programmeInfo.show_title || (group ? group.title : item.title),title:programmeInfo.title,description:programmeInfo.description,duration_seconds:item.duration_seconds,season:item.season,episode_number:item.episode_number,channel_brand:programmeInfo.channel_brand,show_logo:item.show_logo || (group && group.show_logo),brands:item.brands || (group && group.brands)});setPreload(selectedArtwork);overlay('Preparing'); }
   if (recoveringView) { waiting = true; overlay('Buffering… preparing stream'); }
   var mine = ++generation;
   busy = true; message('Preparing ' + item.title + '… Return cancels.');

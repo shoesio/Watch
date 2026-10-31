@@ -97,3 +97,6 @@ html,body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 /* A zero-size text strut centres short BBC marks without a baseline offset. */
 .card .channelCorner{font-size:0;line-height:30px;text-align:center}
 .channelCornerLogo{display:inline-block;vertical-align:middle;margin:0}
+
+/* BBC wordmarks share one smaller lettering height, rather than one width. */
+.channelCornerLogo.bbcChannelLogo{height:14px;width:auto;max-height:14px;max-width:none}

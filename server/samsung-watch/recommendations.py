@@ -160,19 +160,63 @@ def genre_order(library):
  return sorted(available,key=lambda g:(-weights[g],g.casefold()))
 
 
+def home_shows(library,limit=None):
+ """Latest unfinished show, then newest unseen episodes of familiar programmes."""
+ from episode_freshness import released
+ from library_browse import episode_order
+ def number(value):
+  try:return max(0,float(value or 0))
+  except (TypeError,ValueError):return 0
+ def complete(e):return e.get('completed') or number(e.get('progress'))>=95
+ def started(e):return number(e.get('position'))>=10 or number(e.get('progress'))>0
+ def resumable(e):return not complete(e) and started(e) and e.get('id')
+ candidates=[p for p in library if not p.get('live') and not p.get('film') and p.get('episodes') and (p.get('hero') or p.get('artwork') or p.get('image')) and not child_title(p)]
+ known=[p for p in candidates if p.get('favourite') or p.get('recent') or activity(p)]
+ if not known:known=candidates
+ def card(p,e,continuing=False):
+  result=dict(p)
+  if not e:return result
+  season=str(e.get('season') or '');num=e.get('episode_number');parts=[]
+  if season.isdigit():parts.append('Series '+season)
+  if num:parts.append('Episode '+str(num))
+  if not parts and e.get('title'):parts.append(e['title'])
+  fresh=released(e)
+  reason='Continue watching' if continuing else ('Newly available' if fresh and time.time()-fresh<=14*86400 else 'Latest unwatched')
+  result.update(home_episode=e['id'],episode_id=e['id'],home_reason=reason,meta=' · '.join([reason]+parts),
+   description=e.get('description') or p.get('description',''),duration_seconds=e.get('duration_seconds',0),season=season,episode_number=num or 0)
+  if e.get('thumbnail'):
+   result['image']=e['thumbnail'];result['hero']=e['thumbnail']
+  if continuing:
+   result['resume_episode']=e['id'];result['progress']=number(e.get('progress'))
+  else:
+   result.pop('resume_episode',None);result['progress']=0
+  return result
+ resumes=[(number(e.get('updated_at')),p,e) for p in known for e in p['episodes'] if resumable(e)]
+ result=[];seen=set()
+ if resumes:
+  _,p,e=max(resumes,key=lambda row:(row[0],row[1]['id'],row[2]['id']))
+  result.append(card(p,e,True));seen.add(p['id'])
+ updates=[]
+ for p in known:
+  if p['id'] in seen:continue
+  unseen=[e for e in p['episodes'] if e.get('id') and not complete(e) and not started(e)]
+  if unseen:
+   e=max(unseen,key=lambda e:(released(e),episode_order(e)))
+   updates.append((released(e),activity(p),p,e))
+ updates.sort(key=lambda row:(-row[0],-row[1],row[2]['title'].casefold()))
+ for _,__,p,e in updates:result.append(card(p,e));seen.add(p['id'])
+ for p in personal_shows(known,limit=len(known)):
+  if p['id'] in seen:continue
+  remaining=[e for e in p['episodes'] if resumable(e)]
+  e=max(remaining,key=lambda e:number(e.get('updated_at'))) if remaining else None
+  result.append(card(p,e,bool(e)));seen.add(p['id'])
+ if not result:result=known
+ return result if limit is None else result[:limit]
+
+
 def featured_shows(library,limit=6):
- candidates=[p for p in library if not p.get('live') and not p.get('film') and p.get('episodes') and (p.get('hero') or p.get('artwork')) and not child_title(p)]
- ranked=recommend(library,candidates,120,provider_cap=None,include_known=True,include_unmatched=True)
- # Blend familiar highlights and relevant ready-to-play library discoveries.
- recent=personal_shows(candidates,limit=limit)
- pool=[];seen=set()
- for p in recent[:3]+ranked:
-  if p['id'] not in seen:pool.append(p);seen.add(p['id'])
-  if len(pool)>=40:break
- # Keep a current highlight first, then vary providers and programme formats.
- if not pool:return []
- rest=diverse_rank([(1-i*0.008,p) for i,p in enumerate(pool[1:])],limit-1,None)
- return pool[:1]+rest
+ return home_shows(library,limit)
+
 
 class Ratings:
  def __init__(self,private,root):

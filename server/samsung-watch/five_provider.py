@@ -129,7 +129,7 @@ def catalogue(private):
             episodes=[];now=time.time();pid='five_'+ident
             for ep in raw_episodes:
                 if ep.get('vod_s',0)>now or (ep.get('vod_e') and ep['vod_e']<now):continue
-                episodes.append({'id':pid+'_'+ep['id'],'provider_id':'channel5','provider_episode_id':ep['id'],'kind':'provider','title':ep.get('title') or 'Episode','season':ep.get('sea_num') or 'Episodes','episode_number':ep.get('ep_num',0),'description':ep.get('m_desc') or ep.get('s_desc',''),'thumbnail':'https://api-images.channel5.com/otis/images/episode/'+ep['id']+'/1280x720.jpg','duration_seconds':ep.get('len',0)/1000,'live':False})
+                episodes.append({'id':pid+'_'+ep['id'],'provider_id':'channel5','provider_episode_id':ep['id'],'available_at':ep.get('vod_s',0),'kind':'provider','title':ep.get('title') or 'Episode','season':ep.get('sea_num') or 'Episodes','episode_number':ep.get('ep_num',0),'description':ep.get('m_desc') or ep.get('s_desc',''),'thumbnail':'https://api-images.channel5.com/otis/images/episode/'+ep['id']+'/1280x720.jpg','duration_seconds':ep.get('len',0)/1000,'live':False})
             if episodes:
                 shows.append({'id':pid,'title':show['title'],'provider':'Channel 5','provider_id':'channel5','genre':' · '.join(str(v) for v in [show.get('genre'),show.get('primary_vod_genre')]+show.get('vod_subgenres',[]) if v),'media_type':'movie' if show.get('genre')=='Film' else 'tv','description':show.get('m_desc') or show.get('s_desc',''),'artwork':'https://api-images.channel5.com/otis/images/show/'+ident+'/1280x720.jpg','hero':'https://api-images.channel5.com/otis/images/show/'+ident+'/1920x1080.jpg','episodes':episodes,**flags})
     return shows

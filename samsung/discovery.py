@@ -264,7 +264,7 @@ class Discovery:
    if ep.get('status') not in (None,'available') or ep.get('signed'):continue
    sub=ep.get('subtitle') or 'Episode';match=re.search(r'(?:Series|Season)\s+(\d+)',sub,re.I);num=re.search(r'(?:Episode\s+|:\s*)(\d+)',sub)
    version=next((v for v in ep.get('versions',[]) if v.get('kind') in ('original','editorial')),{});duration=version.get('duration',{})
-   show['episodes'].append({'id':'bbc_'+key+'_'+ep['id'],'title':sub,'season':int(match[1]) if match else 'Episodes','episode_number':int(num[1]) if num else ep.get('parent_position',0),'description':ep.get('synopses',{}).get('medium') or ep.get('synopses',{}).get('small',''),'thumbnail':bbc_image(ep.get('images')),'duration_seconds':seconds(duration.get('value') or duration.get('seconds')),'kind':'plugin','url':'https://www.bbc.co.uk/iplayer/episode/'+ep['id'],'quality':'best','delivery':'relay','preserve_timestamps':True,'live':False})
+   show['episodes'].append({'id':'bbc_'+key+'_'+ep['id'],'broadcast_at':ep.get('release_date_time',''),'title':sub,'season':int(match[1]) if match else 'Episodes','episode_number':int(num[1]) if num else ep.get('parent_position',0),'description':ep.get('synopses',{}).get('medium') or ep.get('synopses',{}).get('small',''),'thumbnail':bbc_image(ep.get('images')),'duration_seconds':seconds(duration.get('value') or duration.get('seconds')),'kind':'plugin','url':'https://www.bbc.co.uk/iplayer/episode/'+ep['id'],'quality':'best','delivery':'relay','preserve_timestamps':True,'live':False})
   return show
  def load_channel4(self,key):
   # Reuse the proven metadata-only importer, scoped to exactly one selected title.
@@ -292,7 +292,7 @@ class Discovery:
     mins=ep.get('duration') or 0
     try:duration=float(mins)*60
     except (ValueError,TypeError):duration=0
-    show['episodes'].append({'id':pid+'_'+vid,'provider_id':'u','provider_episode_id':vid,'kind':'provider','title':ep.get('episode_name') or ep.get('name') or 'Episode','season':ep.get('series_number') or series.get('series_number') or 'Episodes','episode_number':ep.get('episode_number',0),'description':ep.get('synopsis') or ep.get('description',''),'thumbnail':picture(ep.get('image') or ep.get('img_url')),'duration_seconds':duration,'live':False})
+    show['episodes'].append({'id':pid+'_'+vid,'provider_id':'u','provider_episode_id':vid,'available_at':ep.get('available_start') or ep.get('available_start_unix') or '','kind':'provider','title':ep.get('episode_name') or ep.get('name') or 'Episode','season':ep.get('series_number') or series.get('series_number') or 'Episodes','episode_number':ep.get('episode_number',0),'description':ep.get('synopsis') or ep.get('description',''),'thumbnail':picture(ep.get('image') or ep.get('img_url')),'duration_seconds':duration,'live':False})
   return show
  def load_channel5(self,key):
   b=self.get('https://corona.channel5.com/shows/'+key+'.json',platform='my5desktop',friendly=1).json();slug=b['f_name'];pid='five_'+key
@@ -300,5 +300,5 @@ class Discovery:
   show={'id':pid,'title':b['title'],'provider':'Channel 5','provider_id':'channel5','media_type':'movie' if b.get('genre')=='Film' else 'tv','genre':' · '.join(five_genres(b)),'description':b.get('m_desc') or b.get('s_desc',''),'artwork':'https://api-images.channel5.com/otis/images/show/'+key+'/1280x720.jpg','hero':'https://api-images.channel5.com/otis/images/show/'+key+'/1920x1080.jpg','episodes':[]}
   for ep in data.get('episodes',[]):
    if ep.get('vod_s',0)>time.time() or (ep.get('vod_e') and ep['vod_e']<time.time()):continue
-   show['episodes'].append({'id':pid+'_'+ep['id'],'provider_id':'channel5','provider_episode_id':ep['id'],'kind':'provider','title':ep.get('title') or 'Episode','season':ep.get('sea_num') or 'Episodes','episode_number':ep.get('ep_num',0),'description':ep.get('m_desc') or ep.get('s_desc',''),'thumbnail':'https://api-images.channel5.com/otis/images/episode/'+ep['id']+'/1280x720.jpg','duration_seconds':ep.get('len',0)/1000,'live':False})
+   show['episodes'].append({'id':pid+'_'+ep['id'],'provider_id':'channel5','provider_episode_id':ep['id'],'available_at':ep.get('vod_s',0),'kind':'provider','title':ep.get('title') or 'Episode','season':ep.get('sea_num') or 'Episodes','episode_number':ep.get('ep_num',0),'description':ep.get('m_desc') or ep.get('s_desc',''),'thumbnail':'https://api-images.channel5.com/otis/images/episode/'+ep['id']+'/1280x720.jpg','duration_seconds':ep.get('len',0)/1000,'live':False})
   return show

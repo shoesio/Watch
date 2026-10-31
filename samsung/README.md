@@ -1,3 +1,13 @@
+## Topical home row and consistent BBC badges 0.329
+
+The For You card row and hero now share a deterministic order: the most recently watched unfinished TV episode first, then the newest unwatched episodes from favourite/recent/watched shows. Completed episodes and films do not displace that lead TV slot. Choosing a home tile starts its exact episode; the first tile retains the existing saved-position/rewind behaviour. The Shows section still provides ordinary series/episode browsing.
+
+Release/availability dates are retained from BBC metadata, Channel 4 first transmission/stream availability, U availability and Five VOD metadata. A private episode baseline records later genuinely added episode IDs, without treating an initial catalogue import or every sync as a new release. Dates are cached so an older importer cannot erase known release ordering; unsupported/missing dates are not invented. Unknown-date episodes use within-show season/episode order and familiar-show history as a fallback.
+
+BBC channel marks use one smaller 14px source-layout height with proportional width, rather than one fixed width. This keeps ONE, TWO, FOUR and NEWS lettering consistent while retaining the centred dark badges. The taller card artwork from 0.328 is preserved.
+
+150 backend tests and five widget checks pass, including ranking, completion, date parsing, first-seen baselines, redaction and direct home-tile resume. The Pi home API returned Continue watching followed by three Newly available tiles, matching its hero order. No TV playback was started in verification. The installer offers 0.329; synchronise from 192.168.0.146 and reopen Watch. The app identity and native autostart profiles are unchanged.
+
 ## Card artwork and channel badges 0.328
 
 Channel logos, including the shorter BBC marks, now centre vertically and horizontally in their existing dark badges. The badge's line height matches its padded interior, with a zero-size text strut to avoid a font-baseline offset. Existing BBC PNGs have no asymmetric transparent padding.

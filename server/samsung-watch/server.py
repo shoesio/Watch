@@ -89,6 +89,8 @@ class Gateway:
         self.metadata_task=None
         try:self.favourite_dates=json.loads((self.discovery_root/'favourite-dates.json').read_text())
         except (OSError,ValueError):self.favourite_dates={}
+        from episode_freshness import EpisodeFreshness
+        self.episode_freshness=EpisodeFreshness(self.discovery_root/'episode-first-seen.json')
         self.result_lists={}
         try:self.favourites=json.loads((self.discovery_root/'favourites.json').read_text())
         except (OSError,ValueError):self.favourites={}
@@ -188,10 +190,20 @@ class Gateway:
 
     @staticmethod
     def public(item):
-        return {k: v for k, v in item.items() if not k.startswith('_')}
+        return {k: v for k, v in item.items() if not k.startswith('_') and k != 'episodes'}
 
     def suggestion_library(self):
-        return [dict(self.public(p),artwork=p.get('hero') or p.get('image'),episodes=[{'duration_seconds':seconds(e.get('duration_seconds')),'updated_at':self.progress_record(e['id']).get('updated_at',0),'completed':self.progress_record(e['id']).get('completed',False),'progress':(self.progress_record(e['id']).get('position',0)/seconds(e.get('duration_seconds'))*100) if seconds(e.get('duration_seconds')) else 0} for e,_ in p['_episodes']]) for p in self.library()]
+        result=[]
+        for p in self.library():
+            episodes=[]
+            for e,provider in p['_episodes']:
+                record=self.progress_record(e['id']);duration=seconds(record.get('duration') or e.get('duration_seconds'))
+                episodes.append({**{key:e.get(key) for key in ('id','title','season','episode_number','description','broadcast_at','available_at')},
+                    'thumbnail':self.art_id(e.get('thumbnail')),'duration_seconds':duration,'updated_at':record.get('updated_at',0),
+                    'position':record.get('position',0),'completed':record.get('completed',False),
+                    'progress':(record.get('position',0)/duration*100) if duration else 0})
+            result.append(dict(self.public(p),artwork=p.get('hero') or p.get('image'),episodes=episodes))
+        return self.episode_freshness.enrich(result)
 
     def discovery_card(self,p):
         if not p.get('discovery_ref'):return self.public(p)
@@ -293,6 +305,9 @@ class Gateway:
         tab = request.query.get('tab', '0')
         items = self.library()
         items = [p for p in items if p['live'] == (tab == '2')]
+        if tab == '0':
+            from recommendations import home_shows
+            items=home_shows(self.suggestion_library())
         film_order={}
         if tab == '3':
             from recommendations import ranked_films
@@ -308,7 +323,7 @@ class Gateway:
         if selected_genre:
             items = [p for p in items if selected_genre in p['genres']]
         if tab == '0':
-            items.sort(key=lambda p: (-max(p.get('updated_at',0),p.get('favourite_at',0)),not p['favourite'],not p['recent'],p['title'].casefold()))
+            pass  # home_shows already applies continue-watching and release-date order.
         elif tab == '3':
             items.sort(key=lambda p:p['film_rank'])
         elif tab == '2':

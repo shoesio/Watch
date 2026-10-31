@@ -99,7 +99,7 @@ class LibrarySync:
     for ep in b.get('episodes',[]):
      a=ep.get('assetInfo',{}).get('streaming');eid=ep.get('programmeId','').replace('/','-')
      if not a or not eid or a.get('startDate','')>time.strftime('%Y-%m-%dT%H:%M:%S') or (a.get('endDate') and a['endDate']<time.strftime('%Y-%m-%dT%H:%M:%S')):continue
-     entry={'id':pid+'_'+eid,'provider_id':'channel4','provider_episode_id':eid,'asset_id':str(a['assetId']),'title':ep.get('secondaryTitle') or ep.get('originalTitle') or ep.get('title') or 'Episode','subtitle':ep.get('title',''),'description':ep.get('summary',''),'season':ep.get('seriesNumber') or 'Episodes','episode_number':ep.get('episodeNumber',0),'thumbnail':self.pic(ep.get('image')),'duration_seconds':a.get('duration',0),'duration_label':a.get('durationLabel',''),'kind':'provider','live':False}
+     entry={'id':pid+'_'+eid,'provider_id':'channel4','provider_episode_id':eid,'asset_id':str(a['assetId']),'broadcast_at':ep.get('firstTXDate',''),'available_at':a.get('startDate',''),'title':ep.get('secondaryTitle') or ep.get('originalTitle') or ep.get('title') or 'Episode','subtitle':ep.get('title',''),'description':ep.get('summary',''),'season':ep.get('seriesNumber') or 'Episodes','episode_number':ep.get('episodeNumber',0),'thumbnail':self.pic(ep.get('image')),'duration_seconds':a.get('duration',0),'duration_label':a.get('durationLabel',''),'kind':'provider','live':False}
      visible=ep.get('secondaryTitle') or ep.get('title','');order=re.search(r'(?:Series|Season)\s+(\d+)\s*[:·-]?\s*Episode\s+(\d+)',visible,re.I)
      if order:entry.update(season=int(order[1]),episode_number=int(order[2]))
      if rid==eid:
@@ -128,7 +128,7 @@ class LibrarySync:
      for ep in data.get('episodes',[]):
       vid=str(ep.get('video_id',''))
       if not vid or vid=='None':continue
-      entry={'id':pid+'_'+vid,'provider_id':'u','provider_episode_id':vid,'title':ep.get('episode_name') or ep.get('name') or 'Episode '+str(ep.get('episode_number','')),'season':ep.get('series_number') or series.get('series_number') or 'Episodes','episode_number':ep.get('episode_number',0),'description':ep.get('synopsis') or ep.get('description',''),'thumbnail':self.pic(ep.get('image') or ep),'duration_label':str(ep.get('duration','')),'kind':'provider','live':False}
+      entry={'id':pid+'_'+vid,'provider_id':'u','provider_episode_id':vid,'available_at':ep.get('available_start') or ep.get('available_start_unix') or '','title':ep.get('episode_name') or ep.get('name') or 'Episode '+str(ep.get('episode_number','')),'season':ep.get('series_number') or series.get('series_number') or 'Episodes','episode_number':ep.get('episode_number',0),'description':ep.get('synopsis') or ep.get('description',''),'thumbnail':self.pic(ep.get('image') or ep),'duration_label':str(ep.get('duration','')),'kind':'provider','live':False}
       if entry['title'].casefold()==show['title'].casefold():entry['title']='Episode '+str(entry['episode_number'])
       entry['subtitle']='Series '+str(entry['season'])+' · Episode '+str(entry['episode_number'])
       if entry['duration_label']:entry['duration_label']+=' min'
