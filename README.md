@@ -19,7 +19,7 @@ This repository groups the existing components without changing the running inst
 
 ### Home Assistant
 
-<img src="home-assistant/dashboard.png" alt="Watch Home Assistant dashboard with screen selection and an episode card" width="403">
+![Watch Home Assistant dashboard captured 1 November 2026](home-assistant/dashboard-current.jpg)
 
 These repository previews illustrate the interfaces; appearance and content may differ on a current installation.
 
