@@ -11,6 +11,18 @@ Watch brings a shared television library to Apple TV, Home Assistant and Samsung
 
 This repository groups the existing components without changing the running installation. The server folder preserves the installed directory names and imports. Component READMEs describe their existing configuration and operation; paths and network addresses in examples reflect the original Pi installation and should be adapted for another host.
 
+## Screenshots
+
+### Apple TV
+
+![Watch Apple TV home preview with featured programme and continue-watching cards](apple-tv/Home-preview.png)
+
+### Home Assistant
+
+<img src="home-assistant/dashboard.png" alt="Watch Home Assistant dashboard with screen selection and an episode card" width="403">
+
+These repository previews illustrate the interfaces; appearance and content may differ on a current installation.
+
 ## AirPlay to the Samsung network player
 
 The [Samsung AirPlay bridge](server/samsung-airplay/) records the Raspberry Pi 500 implementation and tests from 1 November 2026: YouTube and BBC iPlayer from an iPhone, 720p50 H.264/AAC remuxing without transcoding, and confirmed picture, sound and transport controls. It includes the pinned UxPlay callback patch, adapter, service definitions and test limits.
