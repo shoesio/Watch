@@ -11,6 +11,10 @@ Watch brings a shared television library to Apple TV, Home Assistant and Samsung
 
 This repository groups the existing components without changing the running installation. The server folder preserves the installed directory names and imports. Component READMEs describe their existing configuration and operation; paths and network addresses in examples reflect the original Pi installation and should be adapted for another host.
 
+## AirPlay to the Samsung network player
+
+The [Samsung AirPlay bridge](server/samsung-airplay/) records the Raspberry Pi 500 implementation and tests from 1 November 2026: YouTube and BBC iPlayer from an iPhone, 720p50 H.264/AAC remuxing without transcoding, and confirmed picture, sound and transport controls. It includes the pinned UxPlay callback patch, adapter, service definitions and test limits.
+
 ## Samsung Auto Ticker autostart
 
 Watch now has a confirmed native autostart route on the Samsung T27B551 with firmware 1013.0. It uses two TVMW profile settings while keeping the app as an ordinary `ticker=n` widget. Read the [exact setup, verification and recovery guide](samsung/AUTOSTART.md) before reproducing it. Samsung release 0.329 includes transparent playback controls, smaller consistent BBC channel marks, taller card artwork and a topical home row led by the latest unfinished episode.

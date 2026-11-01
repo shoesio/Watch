@@ -1,0 +1,42 @@
+{
+  "recorded_date": "2026-11-01",
+  "upstream_repository": "https://github.com/FDH2/UxPlay",
+  "upstream_commit": "234b407e2e7a8a9a33adf293f0e56fd539658b1e",
+  "upstream_version": "1.74 experimental",
+  "pi_model": "Raspberry Pi 500 Rev 1.0",
+  "os": "Debian GNU/Linux 13.6 arm64",
+  "python": "3.13.5",
+  "ffmpeg": "7.1.5-0+deb13u1+rpt2",
+  "target": "Samsung LT27B551",
+  "tested_output": "1280x720 50fps H.264/AAC, codec-copy MPEG-TS",
+  "user_confirmed": {
+    "YouTube": [
+      "picture",
+      "sound",
+      "pause/resume",
+      "seeking"
+    ],
+    "BBC iPlayer": [
+      "video",
+      "sound",
+      "transport controls"
+    ]
+  },
+  "sha256": {
+    "bridge.py": "6ccf0e58e66a4d22b5566f133e455e9e13161d754b0de5a965bd85e82e173470",
+    "samsung_bridge.h": "6e079a46a86df803319d166c09a5adf33147b58333242b5151e66d7381a8fa2e",
+    "uxplay.patch": "fd44f8ee1b6d2e5b774d58ed5a38cd56734517d3cbe5f709fa8f12cd9b7c1f80",
+    "samsung-airplay-bridge.service": "74aca3802139af27207bc6182abddd9f4bfae948dd977fd5cb4da21a550a2f77",
+    "samsung-airplay-receiver.service": "5086ce96a6b64206eef691704ffccc08a53df56d09014839902f8da9f1ae4347"
+  },
+  "installed_patched_uxplay_cpp_sha256": "cb67d8a9ba7cf24f99aa8314f4a01d536aa1162f044c101de60f9e6670afd04d",
+  "upstream_report_status": "draft only; user requested no public post",
+  "not_tested": [
+    "stock UxPlay local GStreamer rendering of iPlayer",
+    "long playback",
+    "advertisements",
+    "all programme/video changes",
+    "DRM content",
+    "full Pi reboot"
+  ]
+}

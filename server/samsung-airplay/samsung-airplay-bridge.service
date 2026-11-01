@@ -1,0 +1,14 @@
+[Unit]
+Description=Samsung AirPlay codec-copy relay
+[Service]
+Environment=SAMSUNG_MAX_HEIGHT=720
+Environment=SAMSUNG_MAX_FPS=50
+WorkingDirectory=/home/jhewes/samsung-airplay-uxplay
+ExecStart=/usr/bin/python3 /home/jhewes/samsung-airplay-uxplay/bridge.py
+StandardOutput=append:/home/jhewes/samsung-airplay-uxplay/bridge.log
+StandardError=append:/home/jhewes/samsung-airplay-uxplay/bridge.log
+Restart=on-failure
+RestartSec=3
+UMask=0077
+[Install]
+WantedBy=default.target

@@ -1,0 +1,53 @@
+diff --git a/uxplay.cpp b/uxplay.cpp
+index 942d25c..a15023b 100644
+--- a/uxplay.cpp
++++ b/uxplay.cpp
+@@ -3081,9 +3081,11 @@ extern "C" bool check_register(void *cls, const char *client_pk) {
+         return false;
+     }
+ }
+-/* control  callbacks for video player (unimplemented) */
++#include "samsung_bridge.h"
++/* Samsung bridge callbacks, enabled only by SAMSUNG_BRIDGE_SOCKET. */
+ 
+ extern "C" void on_video_play(void *cls, const char* location, const float start_position) {
++    if (samsung_enabled()) { samsung_rpc("play", start_position, location); return; }
+     /* start_position needs to be implemented */
+     video_renderer_set_start(start_position);
+     url.erase();
+@@ -3095,11 +3097,13 @@ extern "C" void on_video_play(void *cls, const char* location, const float start
+ }
+ 
+ extern "C" void on_video_scrub(void *cls, const float position) {
++    if (samsung_enabled()) { samsung_rpc("seek", position); return; }
+     LOGI("on_video_scrub: position = %7.5f\n", position);
+     video_renderer_seek(position);
+ }
+ 
+ extern "C" void on_video_rate(void *cls, const float rate) {
++    if (samsung_enabled()) { samsung_rpc("rate", rate); return; }
+     LOGI("on_video_rate = %7.5f\n", rate);
+     if (rate == 1.0f) {
+         video_renderer_resume();
+@@ -3113,6 +3117,7 @@ extern "C" void on_video_rate(void *cls, const float rate) {
+ 
+ 
+ extern "C" float on_video_playlist_remove (void *cls) {
++    if (samsung_enabled()) { samsung_rpc("rate", 0); return samsung_status().position; }
+     double duration, position, seek_start, seek_end;
+     float rate;
+     bool buffer_empty, buffer_full;
+@@ -3123,11 +3128,13 @@ extern "C" float on_video_playlist_remove (void *cls) {
+ }
+ 
+  extern "C" void on_video_stop(void *cls) {
++    if (samsung_enabled()) { samsung_rpc("stop", 0); return; }
+     LOGI("**************************on_video_stop\n");
+     video_renderer_hls_ready();
+  }
+ 
+ extern "C" void on_video_acquire_playback_info (void *cls, playback_info_t *playback_info) {
++    if (samsung_enabled()) { missed_feedback = 0; *playback_info = samsung_status(); return; }
+     int buffering_level;
+     bool still_playing = video_get_playback_info(&playback_info->duration, &playback_info->position,
+                                                  &playback_info->seek_start, &playback_info->seek_duration,

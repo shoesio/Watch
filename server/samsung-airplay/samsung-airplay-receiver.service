@@ -1,0 +1,15 @@
+[Unit]
+Description=Samsung YouTube AirPlay receiver
+Requires=samsung-airplay-bridge.service
+After=samsung-airplay-bridge.service
+[Service]
+WorkingDirectory=/home/jhewes/samsung-airplay-uxplay
+Environment=SAMSUNG_BRIDGE_SOCKET=/home/jhewes/samsung-airplay-uxplay/bridge.sock
+ExecStart=/usr/bin/stdbuf -oL -eL /home/jhewes/samsung-airplay-uxplay/build/uxplay -n "Samsung YouTube" -hls -reset 0 -p 7110 -vs fakesink -as fakesink -custom "AVC:1080,0; HEVC:0; VP9:0; AV1:0" -lang en -key /home/jhewes/samsung-airplay-uxplay/receiver.pem -rc /dev/null
+StandardOutput=append:/home/jhewes/samsung-airplay-uxplay/receiver.log
+StandardError=append:/home/jhewes/samsung-airplay-uxplay/receiver.log
+Restart=on-failure
+RestartSec=3
+UMask=0077
+[Install]
+WantedBy=default.target
