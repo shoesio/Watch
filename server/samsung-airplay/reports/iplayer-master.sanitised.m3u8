@@ -1,0 +1,19 @@
+#EXTM3U
+# Sanitised structural excerpt of an actual captured iplayer master playlist.
+# Codec order, bandwidth, resolution and frame rate are preserved.
+# All hosts, paths, queries, group identifiers and audio labels are replaced.
+# This is a non-playable example; it contains no media or signed playback URLs.
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-1",NAME="Example audio",URI="https://media.example.invalid/audio-1.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-2",NAME="Example audio",URI="https://media.example.invalid/audio-2.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=349000,CODECS="mp4a.40.5,avc1.42C015",RESOLUTION=384x216,FRAME-RATE=25,AUDIO="audio-1"
+https://media.example.invalid/video-1.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=565000,CODECS="mp4a.40.5,avc1.4D4015",RESOLUTION=512x288,FRAME-RATE=25,AUDIO="audio-2"
+https://media.example.invalid/video-2.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=979000,CODECS="mp4a.40.5,avc1.4D401F",RESOLUTION=704x396,FRAME-RATE=25,AUDIO="audio-2"
+https://media.example.invalid/video-3.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1802000,CODECS="mp4a.40.5,avc1.64001F",RESOLUTION=960x540,FRAME-RATE=25,AUDIO="audio-2"
+https://media.example.invalid/video-4.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=3083000,CODECS="mp4a.40.5,avc1.64001F",RESOLUTION=960x540,FRAME-RATE=50,AUDIO="audio-2"
+https://media.example.invalid/video-5.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=5476000,CODECS="mp4a.40.5,avc1.640020",RESOLUTION=1280x720,FRAME-RATE=50,AUDIO="audio-2"
+https://media.example.invalid/video-6.m3u8

@@ -94,3 +94,7 @@ From this folder run `./prepare-uxplay.sh /path/to/new/uxplay-src`. The script f
 Run the offline codec-order regression checks with `python3 -m unittest -v test_selector.py`. The actual end-to-end checks are documented above; these offline tests do not substitute for physical TV tests. `test_receiver.py` expects the dedicated synthetic fixture server used during development and is not a general unattended acceptance test.
 
 The archived adapter and callback header were compared by SHA-256 with the files installed on the Pi. The patched uxplay.cpp also matched the Pi source exactly. See `snapshot.json` for hashes. No running services were changed while recording this in GitHub.
+
+## Published evidence
+
+See the [sanitised test report and hardware explanation](reports/2026-11-01-test-report.md), [iPlayer master excerpt](reports/iplayer-master.sanitised.m3u8), [YouTube master excerpt](reports/youtube-master.sanitised.m3u8) and [upstream compatibility report](UPSTREAM-REPORT.md). These contain structural evidence and precise test limits; they contain no playable media URLs or account credentials.

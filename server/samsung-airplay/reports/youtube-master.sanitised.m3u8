@@ -1,0 +1,21 @@
+#EXTM3U
+# Sanitised structural excerpt of an actual captured youtube master playlist.
+# Codec order, bandwidth, resolution and frame rate are preserved.
+# All hosts, paths, queries, group identifiers and audio labels are replaced.
+# This is a non-playable example; it contains no media or signed playback URLs.
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-1",NAME="Example audio",URI="https://media.example.invalid/audio-1.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-2",NAME="Example audio",URI="https://media.example.invalid/audio-2.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1565290,CODECS="avc1.4D401E,mp4a.40.2",RESOLUTION=854x480,FRAME-RATE=25,AUDIO="audio-1"
+https://media.example.invalid/video-1.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=375783,CODECS="avc1.4D4015,mp4a.40.5",RESOLUTION=426x240,FRAME-RATE=25,AUDIO="audio-2"
+https://media.example.invalid/video-2.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=460266,CODECS="avc1.4D4015,mp4a.40.2",RESOLUTION=426x240,FRAME-RATE=25,AUDIO="audio-1"
+https://media.example.invalid/video-3.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=886105,CODECS="avc1.4D401E,mp4a.40.2",RESOLUTION=640x360,FRAME-RATE=25,AUDIO="audio-1"
+https://media.example.invalid/video-4.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=194314,CODECS="avc1.4D400C,mp4a.40.5",RESOLUTION=256x144,FRAME-RATE=25,AUDIO="audio-2"
+https://media.example.invalid/video-5.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=4347172,CODECS="avc1.640020,mp4a.40.2",RESOLUTION=1280x720,FRAME-RATE=50,AUDIO="audio-1"
+https://media.example.invalid/video-6.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=6656429,CODECS="avc1.64002A,mp4a.40.2",RESOLUTION=1920x1080,FRAME-RATE=50,AUDIO="audio-1"
+https://media.example.invalid/video-7.m3u8
