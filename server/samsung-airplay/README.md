@@ -98,3 +98,5 @@ The archived adapter and callback header were compared by SHA-256 with the files
 ## Published evidence
 
 See the [sanitised test report and hardware explanation](reports/2026-11-01-test-report.md), [iPlayer master excerpt](reports/iplayer-master.sanitised.m3u8), [YouTube master excerpt](reports/youtube-master.sanitised.m3u8) and [upstream compatibility report](UPSTREAM-REPORT.md). These contain structural evidence and precise test limits; they contain no playable media URLs or account credentials.
+
+The compatibility report was [posted to UxPlay Show and tell discussion #634](https://github.com/FDH2/UxPlay/discussions/634) on 1 November 2026. The report explicitly distinguishes verified external Samsung playback from untested stock UxPlay local rendering.

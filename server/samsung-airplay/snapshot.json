@@ -30,7 +30,7 @@
     "samsung-airplay-receiver.service": "5086ce96a6b64206eef691704ffccc08a53df56d09014839902f8da9f1ae4347"
   },
   "installed_patched_uxplay_cpp_sha256": "cb67d8a9ba7cf24f99aa8314f4a01d536aa1162f044c101de60f9e6670afd04d",
-  "upstream_report_status": "authorised for publication; report and sanitised evidence hosted in public Watch repository",
+  "upstream_report_status": "published with user authorisation",
   "not_tested": [
     "stock UxPlay local GStreamer rendering of iPlayer",
     "long playback",
@@ -38,5 +38,6 @@
     "all programme/video changes",
     "DRM content",
     "full Pi reboot"
-  ]
+  ],
+  "upstream_report_url": "https://github.com/FDH2/UxPlay/discussions/634"
 }
