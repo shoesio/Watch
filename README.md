@@ -17,6 +17,10 @@ This repository groups the existing components without changing the running inst
 
 ![Watch Apple TV home preview with featured programme and continue-watching cards](apple-tv/Home-preview.png)
 
+### Home Assistant
+
+![Watch Home Assistant dashboard with programme browsing and continue-watching cards](home-assistant/watch-dashboard.png)
+
 ### Samsung Smart Hub
 
 ![Watch running on a Samsung television, showing Blue Planet III and programme cards](samsung/screenshots/watch-on-samsung.jpg)
