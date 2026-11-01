@@ -1,5 +1,10 @@
 ## Subtle volume indicator 0.332
 
+![Watch running on a Samsung television](screenshots/watch-on-samsung.jpg)
+
+The app running on physical Samsung hardware.
+
+
 The right-side volume capsule is reduced from 64×280 to 32×160 source-layout pixels. It uses a 4px rail, a smaller speaker/mute mark, no visible numerals or border, and a lighter translucent background. Volume changes still operate the real TV audio; the accessible label retains the level/mute state. It hides after 1.2 seconds with a 0.2-second fade, including delayed visibility hiding so the fade-out is rendered. Reduced-motion disables the transitions.
 
 The audio command/fallback checks and focused computed-style checks pass. The Pi installer offers 0.332, preserving app identity, pairing and all playback assets. Synchronise from 192.168.0.146 and reopen Watch for the physical visual check. No service restart or startup profile change was required.
