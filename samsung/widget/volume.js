@@ -12,10 +12,11 @@ var WatchVolume = (function () {
  function show(value,mute){
   var hud=document.getElementById('volumeHUD');if(!hud){return;}
   hud.className='visible'+(mute?' muted':'');
+  hud.setAttribute('aria-label',mute?'Muted':'Volume '+Math.round(value));
   document.getElementById('volumeFill').style.height=(mute?0:value)+'%';
   document.getElementById('volumeNumber').textContent=mute?'Muted':String(Math.round(value));
   document.getElementById('volumeSymbol').textContent=mute?'×':')';
-  clearTimeout(timer);timer=setTimeout(hide,1800);
+  clearTimeout(timer);timer=setTimeout(hide,1200);
  }
  function init(values){
   keys=values||{};audio=document.getElementById('pluginObjectAudio');nnavi=document.getElementById('pluginObjectNNavi');

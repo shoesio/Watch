@@ -101,15 +101,15 @@ html,body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 /* BBC wordmarks share one smaller lettering height, rather than one width. */
 .channelCornerLogo.bbcChannelLogo{height:14px;width:auto;max-height:14px;max-width:none}
 
-/* Right-side volume HUD; solid dark capsule for the legacy renderer. */
-#volumeHUD{display:block;visibility:hidden;opacity:0;-webkit-transition:opacity .18s ease;transition:opacity .18s ease;position:absolute;right:48px;top:220px;width:64px;height:280px;padding:16px 12px;background:rgba(15,17,23,.92);border:1px solid rgba(255,255,255,.16);border-radius:32px;z-index:500;color:#fff;text-align:center}
-#volumeHUD.visible{visibility:visible;opacity:1}
-#volumeNumber{height:24px;line-height:24px;font-size:16px;font-weight:700}
-#volumeTrack{position:relative;width:12px;height:170px;margin:10px auto 14px;background:#41454f;border-radius:6px;overflow:hidden}
-#volumeFill{position:absolute;left:0;bottom:0;width:12px;background:#f5f5f7;border-radius:6px;-webkit-transition:height .1s linear;transition:height .1s linear}
-#volumeIcon{position:relative;height:24px;width:32px;margin:0 auto}
-#volumeSpeaker{position:absolute;left:5px;top:7px;width:6px;height:10px;background:#fff}
-#volumeSpeaker:after{content:'';position:absolute;left:4px;top:-4px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-right:9px solid #fff}
-#volumeSymbol{position:absolute;right:0;top:0;font-family:Arial,sans-serif;font-size:24px;line-height:24px}
-#volumeHUD.muted #volumeNumber{font-size:11px}#volumeHUD.muted #volumeFill{height:0!important}
-@media (prefers-reduced-motion:reduce){#volumeFill{-webkit-transition:none;transition:none}}
+/* Quiet right-side volume indicator: narrow rail, small icon, no numerals. */
+#volumeHUD{display:block;visibility:hidden;opacity:0;-webkit-transition:opacity .2s ease,visibility 0s linear .2s;transition:opacity .2s ease,visibility 0s linear .2s;position:absolute;right:40px;top:280px;width:32px;height:160px;padding:12px 7px;background:rgba(15,17,23,.64);border:0;border-radius:16px;z-index:500;color:#eee;text-align:center}
+#volumeHUD.visible{visibility:visible;opacity:1;-webkit-transition-delay:0s;transition-delay:0s}
+#volumeNumber{display:none}
+#volumeTrack{position:relative;width:4px;height:108px;margin:0 auto 12px;background:rgba(255,255,255,.23);border-radius:2px;overflow:hidden}
+#volumeFill{position:absolute;left:0;bottom:0;width:4px;background:#eee;border-radius:2px;-webkit-transition:height .1s linear;transition:height .1s linear}
+#volumeIcon{position:relative;height:16px;width:18px;margin:0 auto}
+#volumeSpeaker{position:absolute;left:1px;top:5px;width:3px;height:6px;background:#ddd}
+#volumeSpeaker:after{content:'';position:absolute;left:2px;top:-3px;border-top:6px solid transparent;border-bottom:6px solid transparent;border-right:6px solid #ddd}
+#volumeSymbol{position:absolute;right:0;top:0;font-family:Arial,sans-serif;font-size:15px;line-height:16px;color:#ddd}
+#volumeHUD.muted #volumeFill{height:0!important}
+@media (prefers-reduced-motion:reduce){#volumeHUD,#volumeFill{-webkit-transition:none;transition:none}}
