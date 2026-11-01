@@ -1,3 +1,13 @@
+## Samsung remote volume and mute 0.330
+
+Load Samsung's legacy Common/API/Plugin.js and enable the native volume banner through NNAVI SetBannerState(1). On the capital-S window.onShow lifecycle, unregister only KEY_VOL_UP, KEY_VOL_DOWN and KEY_MUTE from app interception, using Common.API.Plugin.unregistKey. This is deliberately after sendReadyEvent, as required by the 2012 platform. Any pre-existing onShow handler is preserved.
+
+If volume/mute key events still reach Watch, return before blockNavigation, preventDefault, dialogs or playback handlers. These buttons no longer become generic playback/navigation events or Escape. No volume is changed at startup and no custom software volume is applied. Autostart profiles and playback services are unchanged.
+
+Six widget checks cover lifecycle ordering, three-key scope, SDK key values/fallbacks, modal pass-through and existing playback/browsing. The installer offers 0.330; synchronise and reopen Watch, then check volume up/down and mute on the real TV. Physical confirmation remains pending.
+
+References: [Samsung legacy TV functionalities](https://developer.samsung.com/smarttv/legacy/development-guides/tv-functionalities.html), specifically its native Volume OSD, 2012 Volume UI and key registration guides; [Samsung Application Development Guide 1.20](https://freethetv2011.s3.amazonaws.com/App_Development_Guide_for_Samsung_Smart_TV%5BV1.20%5D%5B1%5D.pdf) for Common.API.Plugin, unregistKey and required plugin object IDs. SDK manuals are not committed.
+
 ## Topical home row and consistent BBC badges 0.329
 
 The For You card row and hero now share a deterministic order: the most recently watched unfinished TV episode first, then the newest unwatched episodes from favourite/recent/watched shows. Completed episodes and films do not displace that lead TV slot. Choosing a home tile starts its exact episode; the first tile retains the existing saved-position/rewind behaviour. The Shows section still provides ordinary series/episode browsing.
