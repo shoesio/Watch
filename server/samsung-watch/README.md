@@ -1,3 +1,13 @@
+## Watch volume HUD 0.331
+
+The remote now drives the TV AUDIO plugin while Watch shows a narrow right-side volume capsule, level bar, numeric value and mute state. It hides after 1.8 seconds, uses modest opacity/level transitions and requires no modern CSS filters. Volume/mute applies across browsing, dialogs and video without changing playback or navigating the UI.
+
+On the capital-S onShow lifecycle, probe GetVolume/GetUserMute, register only the three audio keys and suppress the native banner with NNAVI SetBannerState(0). Volume commands use SetVolumeWithKey(0/1); mute uses SetUserMute. Startup does not change volume/mute. Volume +/− clears user mute and adjusts the real TV volume. Invalid readings or declined/unavailable APIs restore native key handling/banner; an attempted command is never replayed as an extra default step. Exiting restores native banners. No persistent startup profiles are touched.
+
+Seven local widget checks cover actual command/readback wiring, limits, mute, auto-hide, native fallback, lifecycle ordering and the existing browsing/playback routes. Real-TV acceptance of the custom AUDIO calls still needs confirmation. The Pi installer offers 0.331, preserving the paired connection and SamsungWatch identity. Synchronise from 192.168.0.146 and reopen Watch.
+
+Implementation uses the Samsung-authored [DeviceAPI Guide 2.20](https://freethetv2011.s3.amazonaws.com/DeviceAPI_Guide%5BV2.20%5D%5B1%5D.pdf), AUDIO GetVolume/GetUserMute/SetUserMute/SetVolumeWithKey and NNAVI banner states. This is an Orsay implementation, not a Tizen API.
+
 ## Samsung remote volume and mute 0.330
 
 Load Samsung's legacy Common/API/Plugin.js and enable the native volume banner through NNAVI SetBannerState(1). On the capital-S window.onShow lifecycle, unregister only KEY_VOL_UP, KEY_VOL_DOWN and KEY_MUTE from app interception, using Common.API.Plugin.unregistKey. This is deliberately after sendReadyEvent, as required by the 2012 platform. Any pre-existing onShow handler is preserved.

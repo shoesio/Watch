@@ -6,11 +6,13 @@
 <script src="$MANAGER_WIDGET/Common/API/Widget.js"></script>
 <script src="$MANAGER_WIDGET/Common/API/TVKeyValue.js"></script>
 <script src="$MANAGER_WIDGET/Common/API/Plugin.js"></script>
-<script src="connection.js"></script><script src="preview.js"></script><script src="watch.js"></script>
+<script src="connection.js"></script><script src="preview.js"></script><script src="volume.js"></script><script src="watch.js"></script>
 </head><body onload="Watch.init()" onunload="Watch.shutdown()">
 <object id="player" classid="clsid:SAMSUNG-INFOLINK-PLAYER" style="position:absolute;width:0;height:0"></object>
 <object id="pluginObjectTVMW" classid="clsid:SAMSUNG-INFOLINK-TVMW" style="position:absolute;width:0;height:0"></object>
 <object id="pluginObjectNNavi" classid="clsid:SAMSUNG-INFOLINK-NNAVI" style="position:absolute;width:0;height:0"></object>
+<object id="pluginObjectAudio" classid="clsid:SAMSUNG-INFOLINK-AUDIO" style="position:absolute;width:0;height:0"></object>
+<div id="volumeHUD" role="status" aria-label="Volume"><div id="volumeNumber"></div><div id="volumeTrack"><div id="volumeFill"></div></div><div id="volumeIcon"><span id="volumeSpeaker"></span><span id="volumeSymbol">)</span></div></div>
 <div id="shell">
  <div id="hero"><img id="heroImage" alt=""><div id="heroShade"></div><div id="heroBottom"></div>
   <div id="heroText"><div id="heroBrands"></div><div id="eyebrow">Your library</div><img id="showLogo" alt="" style="display:none"><h1 id="title">Welcome home.</h1><p id="description">Connecting to your programmes on the Pi…</p></div>

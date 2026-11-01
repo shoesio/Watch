@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.330', seekTransition = false;
+ var buildVersion = '0.331', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -404,6 +404,7 @@ var Watch = (function () {
   if (api) { api.sendReturnEvent(); }
  }
  function nativeVolume() {
+  if (typeof WatchVolume !== 'undefined') { WatchVolume.init(keys); return; }
   // 2012 Orsay requires the capital-S onShow lifecycle, after sendReadyEvent.
   try { el('pluginObjectNNavi').SetBannerState(1); } catch (ignoreBanner) {}
   if (typeof Common === 'undefined' || !Common.API || !Common.API.Plugin) { return; }
@@ -417,7 +418,10 @@ var Watch = (function () {
  function key(e) {
   e = e || window.event; var k = e.keyCode; lastInput = new Date().getTime();
   function is(name, fallback) { return k === (typeof keys[name] === 'number' ? keys[name] : fallback); }
-  if (is('KEY_VOL_UP', 7) || is('KEY_VOL_DOWN', 11) || is('KEY_MUTE', 27)) { return true; }
+  if (is('KEY_VOL_UP', 7) || is('KEY_VOL_DOWN', 11) || is('KEY_MUTE', 27)) {
+   if (typeof WatchVolume !== 'undefined' && WatchVolume.handle(k)) { if (api) { api.blockNavigation(e); } if (e.preventDefault) { e.preventDefault(); } return false; }
+   return true;
+  }
   if (is('KEY_EXIT', 10182)) { shutdown(); if (api) { api.sendExitEvent(); } return false; }
   if (api) { api.blockNavigation(e); } if (e.preventDefault) { e.preventDefault(); }
   if (el('searchMenu').style.display === 'block') { if (is('KEY_RETURN',10009) || k === 8 || k === 27) { el('searchMenu').style.display = 'none'; } else if (is('KEY_ENTER',13)) { searchKey(); } else { if (is('KEY_LEFT',37)) { searchFocus = Math.max(0,searchFocus-1); } if (is('KEY_RIGHT',39)) { searchFocus = Math.min(searchLetters.length-1,searchFocus+1); } if (is('KEY_UP',38)) { searchFocus = Math.max(0,searchFocus-6); } if (is('KEY_DOWN',40)) { searchFocus = Math.min(searchLetters.length-1,searchFocus+6); } paintSearch(); } return false; }
@@ -502,7 +506,7 @@ var Watch = (function () {
   featureTimer = setInterval(function () { if ((browseMode !== 'featured' && !(tab===0 && !browseMode && highlights.length)) || group || busy || playing || area !== 'grid' || !rows.length || new Date().getTime()-lastInput < 18000) { return; } if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; } if (tab===0 && !browseMode && highlights.length) { highlightFocus=(highlightFocus+1)%highlights.length; } else { focus=(focus+1)%rows.length; } paint(); },18000);
   guideRefresh = setInterval(function () { if (tab === 2 && !group && !playing && !busy) { loadPage(page, focus); } }, 60000);
  }
- function shutdown() { clearInterval(featureTimer);clearInterval(guideRefresh); stop(false); }
+ function shutdown() { if (typeof WatchVolume !== 'undefined') { WatchVolume.shutdown(); } clearInterval(featureTimer);clearInterval(guideRefresh); stop(false); }
  return {init: init, key: key, shutdown: shutdown,
   streamReady: function () { try { player.SetDisplayArea(0, 0, 960, 540); } catch (ignore) {} },
   buffering: buffering,

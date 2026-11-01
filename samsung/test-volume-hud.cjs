@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),{JSDOM}=require('jsdom'),root=path.join(__dirname,'widget');
+const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{runScripts:'outside-only'}),w=dom.window;
+let value=40,mute=0,commands=[],registered=[],released=[],banners=[],timers=[];
+w.setTimeout=fn=>{timers.push(fn);return timers.length};w.clearTimeout=()=>{};
+w.Common={API:{Plugin:function(){this.registKey=k=>registered.push(k);this.unregistKey=k=>released.push(k);}}};
+const audio=w.document.getElementById('pluginObjectAudio');audio.GetVolume=()=>value;audio.GetUserMute=()=>mute;audio.SetVolumeWithKey=k=>{commands.push(['volume',k]);value+=k===0?1:-1;return 1};audio.SetUserMute=n=>{commands.push(['mute',n]);mute=n;return 1};
+w.document.getElementById('pluginObjectNNavi').SetBannerState=n=>banners.push(n);
+w.eval(fs.readFileSync(path.join(root,'volume.js'),'utf8'));
+w.WatchVolume.init({});assert.deepEqual(registered,[7,11,27]);assert.equal(commands.length,0);assert.equal(banners.at(-1),0);
+assert.equal(w.WatchVolume.handle(7),true);assert.equal(value,41);assert.equal(w.document.getElementById('volumeFill').style.height,'41%');
+w.WatchVolume.handle(11);assert.equal(value,40);w.WatchVolume.handle(27);assert.equal(mute,1);assert.equal(w.document.getElementById('volumeNumber').textContent,'Muted');
+w.WatchVolume.handle(7);assert.equal(mute,0);assert.equal(value,41);assert.equal(w.WatchVolume.handle(13),false);
+value=100;w.WatchVolume.handle(7);assert.equal(value,100);value=0;w.WatchVolume.handle(11);assert.equal(value,0);
+timers.at(-1)();assert.equal(w.document.getElementById('volumeHUD').className,'');
+audio.GetVolume=()=>-1;assert.equal(w.WatchVolume.handle(7),false);assert.equal(banners.at(-1),1);assert.deepEqual(released.slice(-3),[7,11,27]);
+w.WatchVolume.shutdown();assert.equal(banners.at(-1),2);dom.window.close();console.log('PASS: real TV volume/mute, right HUD values, auto-hide, limits, no startup mutation and native fallback.');
