@@ -10,8 +10,27 @@ struct PlaybackSelection: Identifiable {
 
 @MainActor final class PlaybackModel: ObservableObject {
     let api: WatchAPI
-    let selection: PlaybackSelection
+    @Published var selection: PlaybackSelection
     let player = AVPlayer()
+    @Published var chapters:[PlaybackInterval]=[]
+    @Published var skipMarkers:[PlaybackInterval]=[]
+    private var dismissedSkipIDs=Set<String>()
+    @Published var nextEpisode:NextEpisode?
+    @Published var showUpNext=false
+    @Published var creditsCue:PlaybackInterval?
+    private var creditsState=CreditsCueState()
+    @Published var countdown:Int?
+    @Published var nextMessage:String?
+    @Published var switchingEpisode=false
+    @Published var autoplay=UserDefaults.standard.bool(forKey:"watch.autoplayNext")
+    private var queueSnapshot:SeriesQueue?
+    private var extrasTask:Task<Void,Never>?
+    private var planningTask:Task<Void,Never>?
+    private var completionTask:Task<Void,Never>?
+    private var countdownTask:Task<Void,Never>?
+    private var transitionTask:Task<Void,Never>?
+    private var completionGate=EpisodeCompletionGate()
+    private var playWhenReady=true
     @Published var nativeTransport=false
     @Published var preparing = true
     @Published var hasStarted=false
@@ -26,6 +45,9 @@ struct PlaybackSelection: Identifiable {
     private var itvHTTP:ITVProbeHTTP?
     @Published var signInProvider:SignInProvider?
     private var directBBC=false
+    private var uhdActive=false
+    private var forceHD=false
+    private let bbcUHD=UHDPlaybackAccess()
     private var forceRelay=false
     private var ticket: String?
     private var task: Task<Void, Never>?
@@ -39,6 +61,7 @@ struct PlaybackSelection: Identifiable {
     private var savedAt = Date.distantPast
     private var waitingSince: Date?
     private var pausedAt: Date?
+    private var pausedPosition:Double?
     private var offset: Double = 0
     @Published private(set) var position: Double = 0
     @Published var isPlaying=false
@@ -48,13 +71,17 @@ struct PlaybackSelection: Identifiable {
     private var generation = 0
     init(api:WatchAPI, selection:PlaybackSelection) { self.api=api; self.selection=selection; position=selection.position; player.allowsExternalPlayback=false }
 
-    func begin(at requested:Double? = nil, automatic:Bool = false, keepFrame:Bool = false) {
+    func begin(at requested:Double? = nil, automatic:Bool = false, keepFrame:Bool = false, playWhenReady:Bool = true) {
         guard !closed else { return }
+        self.playWhenReady=playWhenReady
+        extrasTask?.cancel();planningTask?.cancel();completionTask?.cancel();cancelCountdown()
+        chapters=[];skipMarkers=[];nextEpisode=nil;queueSnapshot=nil;showUpNext=false;creditsCue=nil
+        completionGate.reset()
         finished=false; generation += 1; let mine=generation
-        task?.cancel(); player.pause()
+        task?.cancel(); player.pause();bbcUHD.stop();uhdActive=false
         if let ticket { let old=position; Task { await api.progress(ticket:ticket,position:old) } }
         let previous=ticket; ticket=nil; preparing=true; reconnecting=automatic || keepFrame; buffering=true; error=nil
-        pausedAt=nil; waitingSince=nil; stableSince=nil; needsChannel5SignIn=false;signInProvider=nil
+        pausedAt=nil; pausedPosition=nil; waitingSince=nil; stableSince=nil; needsChannel5SignIn=false;signInProvider=nil
         let start=selection.programme.live ? 0 : max(0,requested ?? position)
         position=start
         task=Task {
@@ -65,7 +92,7 @@ struct PlaybackSelection: Identifiable {
                 guard mine==generation, !Task.isCancelled, !closed else {
                     if let ticket=prepared.ticket { Task { await api.release(ticket:ticket) } }; return
                 }
-                guard let ticket=prepared.ticket, let metadata=prepared.metadata else { throw WatchError(message:"The Pi returned an incomplete playback response.") }
+                guard let ticket=prepared.ticket, var metadata=prepared.metadata else { throw WatchError(message:"The Pi returned an incomplete playback response.") }
                 self.ticket=ticket; self.metadata=metadata; self.offset=metadata.startPosition ?? start
                 let item:AVPlayerItem
                 var nextFairPlay:(any NativeKeySession)?
@@ -83,6 +110,19 @@ struct PlaybackSelection: Identifiable {
                         }
                     }
                     keys.attach(to:asset);nextFairPlay=keys;item=AVPlayerItem(asset:asset);directBBC=false
+                } else if let native=prepared.native,native.provider == "channel4" {
+                    let source=try await Channel4PlaybackAPI.shared.source(id:native.id,live:true)
+                    guard mine==generation,!Task.isCancelled,!closed else {return}
+                    guard let config=source.channel4FairPlay,let certificate=source.fairPlayCertificate else {throw WatchError(message:"Channel 4 did not supply Apple TV playback details.")}
+                    let asset=AVURLAsset(url:source.url)
+                    nextFairPlay=Channel4FairPlaySession(config:config,certificate:certificate) { [weak self] message,failed in
+                        guard failed else {return}
+                        Task { @MainActor in
+                            guard let self,self.generation==mine,!self.closed else {return}
+                            self.player.pause();self.buffering=false;self.error=message
+                        }
+                    }
+                    nextFairPlay?.attach(to:asset);item=AVPlayerItem(asset:asset);directBBC=false
                 } else if let native=prepared.native,native.provider == "u" || native.provider == "itv" {
                     let source = native.provider == "u" ? try await UPlaybackAPI.shared.source(id:native.id) : try await ITVPlaybackAPI.shared.source(native)
                     guard mine==generation,!Task.isCancelled,!closed else {return}
@@ -96,24 +136,39 @@ struct PlaybackSelection: Identifiable {
                     nextFairPlay?.attach(to:asset);item=AVPlayerItem(asset:asset);directBBC=false
                 } else {
                     guard let raw=prepared.url,let url=URL(string:raw) else { throw WatchError(message:"The playback address is missing.") }
-                    item=AVPlayerItem(url:url);directBBC=prepared.native?.provider == "bbc"
+                    var selectedURL=url
+                    if prepared.native?.provider == "bbc" {UHDIdentityVault.diagnostic("bbc-playback")}
+                    if let native=prepared.native,native.provider == "bbc",!native.live,!forceHD,UHDIdentityVault.isConfigured {
+                        let pid=String(native.id.suffix(8))
+                        do {
+                            UHDIdentityVault.diagnostic("requesting-uhd")
+                            let source=try await bbcUHD.source(for:BBCUHDProgramme(id:pid,version:metadata.versionId ?? ""))
+                            guard mine==generation,!Task.isCancelled,!closed else {bbcUHD.stop();return}
+                            selectedURL=source.url;metadata.versionId=source.versionID;self.metadata=metadata;uhdActive=true;UHDIdentityVault.diagnostic("uhd-ready")
+                        } catch is CancellationError {throw CancellationError()}
+                        catch {bbcUHD.stop();UHDIdentityVault.diagnostic("hd-fallback",error:error)} // Keep the verified HD route if BBC offers no compatible UHD.
+                    }
+                    item=AVPlayerItem(url:selectedURL);directBBC=prepared.native?.provider == "bbc" && !uhdActive
                 }
                 nativeTransport=prepared.native != nil
                 if nativeTransport { self.offset=0 }
                 item.preferredForwardBufferDuration=selection.programme.live ? 45 : 30
+                item.automaticallyPreservesTimeOffsetFromLive=false
                 if selection.programme.live {
                     item.canUseNetworkResourcesForLiveStreamingWhilePaused=true
                     item.configuredTimeOffsetFromLive=CMTime(seconds:30,preferredTimescale:600)
-                    item.automaticallyPreservesTimeOffsetFromLive=true
                 }
                 let previousFairPlay=fairPlay;fairPlay=nextFairPlay;let oldITVHTTP=itvHTTP;itvHTTP=nextITVHTTP
                 item.externalMetadata=Self.assetMetadata(metadata)
                 attach(item); player.replaceCurrentItem(with:item); previousFairPlay?.stop();oldITVHTTP?.cancel(); player.automaticallyWaitsToMinimizeStalling=true
-                if let initialSeek=prepared.initialSeek, initialSeek>0 {
+                if let initialSeek=prepared.initialSeek, initialSeek>0 || (!selection.programme.live && !nativeTransport) {
                     await player.seek(to:CMTime(seconds:initialSeek,preferredTimescale:600),toleranceBefore:.zero,toleranceAfter:.zero)
                     guard mine==generation, !closed else { return }
                 }
-                preparing=false; reconnecting=false; pausedAt=nil; waitingSince=Date(); player.play(); installObservers()
+                preparing=false; reconnecting=false; pausedAt=nil; waitingSince=playWhenReady ? Date() : nil
+                if playWhenReady {player.play()} else {player.pause();isPlaying=false;buffering=false;pausedPosition=start}
+                installObservers()
+                loadExtras(generation:mine,ticket:ticket,source:metadata.sourceKey,version:metadata.versionId,bbc:prepared.native?.provider == "bbc" || metadata.brands?.contains(where:{$0.name.localizedCaseInsensitiveContains("iPlayer")}) == true)
             } catch {
                 guard mine==generation, !Task.isCancelled, !closed else { return }
                 preparing=false; reconnecting=false; buffering=false
@@ -138,7 +193,7 @@ struct PlaybackSelection: Identifiable {
         itemStatus=item.observe(\.status,options:[.new]) { [weak self] item,_ in
             if item.status == .failed { Task { @MainActor in guard self?.generation==mine else { return };self?.recover() } }
         }
-        ended=NotificationCenter.default.addObserver(forName:.AVPlayerItemDidPlayToEndTime,object:item,queue:.main) { [weak self] _ in Task { @MainActor in self?.didEnd() } }
+        ended=NotificationCenter.default.addObserver(forName:.AVPlayerItemDidPlayToEndTime,object:item,queue:.main) { [weak self] _ in Task { @MainActor in guard self?.generation==mine else {return};self?.didEnd() } }
         failedToEnd=NotificationCenter.default.addObserver(forName:.AVPlayerItemFailedToPlayToEndTime,object:item,queue:.main) { [weak self] _ in
             Task { @MainActor in guard self?.generation==mine else { return };self?.recover() }
         }
@@ -153,9 +208,14 @@ struct PlaybackSelection: Identifiable {
                 switch player.timeControlStatus {
                 case .waitingToPlayAtSpecifiedRate: self.isPlaying=true; self.stableSince=nil; self.buffering=true; if self.waitingSince == nil { self.waitingSince=Date() }
                 case .playing:
-                    self.isPlaying=true;self.hasStarted=true
+                    // System/Control Centre play commands can bypass toggle().
+                    // Honour the same paused anchor before advancing progress.
+                    if let anchor=self.pausedPosition, self.playWhenReady {
+                        self.pausedPosition=nil;self.jump(to:anchor);return
+                    }
+                    self.playWhenReady=true;self.isPlaying=true;self.hasStarted=true
                     self.pausedAt=nil; self.buffering=false; self.waitingSince=nil; if self.stableSince == nil { self.stableSince=Date() }
-                case .paused: self.isPlaying=false; self.pausedAt=Date(); self.buffering=false; self.waitingSince=nil
+                case .paused: if !self.selection.programme.live && self.pausedPosition == nil { self.pausedPosition=self.position }; self.isPlaying=false; self.pausedAt=Date(); self.buffering=false; self.waitingSince=nil
                 @unknown default: break
                 }
             }
@@ -170,9 +230,16 @@ struct PlaybackSelection: Identifiable {
         }
     }
     func tick(_ time:CMTime) {
-        guard !preparing, !closed, !finished, time.seconds.isFinite else { return }
+        guard !preparing, !closed, !finished, time.seconds.isFinite, pausedPosition == nil else { return }
         if let since=stableSince,Date().timeIntervalSince(since)>90 { retries=0 }
         position=offset+max(0,time.seconds)
+        if player.timeControlStatus == .playing {completionGate.played(at:position)}
+        if let cue=creditsCue,!cue.contains(position) {creditsCue=nil}
+        if creditsCue == nil {
+            creditsCue=creditsState.offer(markers:chapters,position:position,duration:duration,
+                playing:player.timeControlStatus == .playing,hasNext:nextEpisode != nil,
+                blocked:preparing || buffering || reconnecting || showUpNext || finished || error != nil || selection.programme.live)
+        }
         if let duration=metadata?.durationSeconds, duration>0 { position=min(duration,position) }
         if player.timeControlStatus == .playing, Date().timeIntervalSince(savedAt)>10 {
             savedAt=Date(); if let ticket { let current=position; Task { await api.progress(ticket:ticket,position:current) } }
@@ -191,15 +258,19 @@ struct PlaybackSelection: Identifiable {
     func recover() {
         guard !preparing, !closed, error == nil else { return }
         if retries>=6 { player.pause(); buffering=false; error="Playback is having trouble reconnecting. Your position has been saved."; return }
-        if directBBC { forceRelay=true }; retries += 1; begin(automatic:true)
+        if uhdActive { forceHD=true } else if directBBC { forceRelay=true }; retries += 1; begin(automatic:true,playWhenReady:playWhenReady)
     }
     func didEnd() {
-        let duration=self.duration
-        if !selection.programme.live && duration>0 && position>=duration-12 {
-            finished=true; position=duration
-            if let ticket { Task { await api.progress(ticket:ticket,position:duration,completed:true) } }
-            buffering=false
-        } else { recover() }
+        guard !finished,!closed,!preparing else {return}
+        let now=player.currentTime().seconds
+        let actual=now.isFinite ? offset+max(0,now) : position
+        if completionGate.accept(position:actual,duration:duration,live:selection.programme.live,failed:error != nil || buffering) {
+            finished=true;position=duration;isPlaying=false;buffering=false;player.pause()
+            completeEpisode()
+        } else if !selection.programme.live && actual>=duration-1.5 && duration>0 {
+            // A user seek to the end stops here without completing/advancing.
+            isPlaying=false;buffering=false;player.pause()
+        } else {recover()}
     }
     func retry() { retries=0; begin() }
     var duration:Double {
@@ -211,29 +282,207 @@ struct PlaybackSelection: Identifiable {
         let size=player.currentItem?.presentationSize ?? .zero
         return StreamQuality.label(width:size.width,height:size.height) ?? metadata?.quality
     }
-    func pause() { player.pause(); isPlaying=false }
-    func toggle() {
-        if isPlaying { pause() } else if !preparing { player.play();isPlaying=true }
+    func pause() {
+        playWhenReady=false
+        if !selection.programme.live {
+            let seconds=player.currentTime().seconds
+            if seconds.isFinite {position=offset+max(0,seconds)}
+            pausedPosition=position
+        }
+        player.pause(); isPlaying=false
     }
-    func jump(to seconds:Double) {
+    func toggle() {
+        guard !finished else {cancelCountdown();return}
+        if isPlaying { pause() }
+        else if !preparing {
+            playWhenReady=true
+            if let anchor=pausedPosition { pausedPosition=nil;jump(to:anchor) }
+            else { player.play();isPlaying=true }
+        }
+    }
+    func goLive() {
+        guard selection.programme.live,!preparing else {return}
+        playWhenReady=true
+        if let range=player.currentItem?.seekableTimeRanges.last?.timeRangeValue {
+            let target=max(range.start.seconds,CMTimeRangeGetEnd(range).seconds-15)
+            guard target.isFinite else {return}
+            buffering=true
+            let mine=generation
+            player.seek(to:CMTime(seconds:target,preferredTimescale:600)) { [weak self] _ in
+                Task { @MainActor in guard let self,self.generation==mine,!self.closed else {return};self.player.play();self.isPlaying=true }
+            }
+        } else {begin(keepFrame:true)}
+    }
+    func jump(to seconds:Double,resume:Bool = true) {
+        guard !finished else {return}
+        playWhenReady=resume
+        pausedPosition=nil
         let absolute=EpisodeTimeline.clamp(seconds,duration:duration)
+        completionGate.sought(to:absolute)
+        let mine=generation
         let relative=absolute-offset
         let target=CMTime(seconds:relative,preferredTimescale:600)
         let buffered=relative>=0 && (player.currentItem?.seekableTimeRanges.contains { CMTimeRangeContainsTime($0.timeRangeValue,time:target) } ?? false)
         if buffered {
             buffering=true; position=absolute
             player.seek(to:target,toleranceBefore:.zero,toleranceAfter:.zero) { [weak self] done in
-                Task { @MainActor in guard let self,!self.closed else { return };if done { self.player.play();self.isPlaying=true;self.buffering=false } else { self.begin(at:absolute,keepFrame:true) } }
+                Task { @MainActor in guard let self,!self.closed,self.generation==mine else { return };if done {
+                        if resume {self.player.play()} else {self.player.pause();self.pausedPosition=absolute}
+                        self.isPlaying=resume;self.buffering=false
+                    } else {self.begin(at:absolute,keepFrame:true,playWhenReady:resume);self.completionGate.sought(to:absolute)} }
             }
-        } else { retries=0;begin(at:absolute,keepFrame:true) }
+        } else { retries=0;begin(at:absolute,keepFrame:true,playWhenReady:resume);completionGate.sought(to:absolute) }
+    }
+    var activeSkip:PlaybackInterval? {
+        guard hasStarted,!preparing,!buffering,!reconnecting,!finished,error == nil,!showUpNext,creditsCue == nil else {return nil}
+        return skipMarkers.first {$0.contains(position) && !dismissedSkipIDs.contains($0.id)}
+    }
+    func loadExtras(generation mine:Int,ticket:String,source:String?,version:String?,bbc:Bool) {
+        extrasTask?.cancel();planningTask?.cancel()
+        chapters=[];skipMarkers=[];nextEpisode=nil;queueSnapshot=nil
+        extrasTask=Task { [weak self] in
+            guard let self,let source else {return}
+            guard let capability=try? await api.playbackCapabilities(),capability.schemaVersion==1,!Task.isCancelled else {return}
+            guard let result=try? await api.features(episode:selection.episode.id,source:source,version:version,ticket:ticket),
+                  !Task.isCancelled,generation==mine,!closed,result.matches(episode:selection.episode.id,source:source,version:version) else {return}
+            chapters=capability.chapters ? result.chapters.filter {$0.valid(duration:duration) && !(bbc && version == nil && ["credits","end_credits"].contains($0.kind))} : []
+            skipMarkers = bbc && version == nil ? [] : result.skipMarkers.filter {capability.skipMarkers.contains($0.kind) && $0.valid(duration:duration)}
+        }
+        guard !selection.programme.live,!selection.programme.film else {return}
+        planningTask=Task { [weak self] in
+            guard let self else {return}
+            do {
+                let capability=try await api.playbackCapabilities()
+                guard capability.schemaVersion==1,capability.seriesQueue else {return}
+                let upcoming=try await api.upNext(episode:selection.episode.id)
+                guard !Task.isCancelled,generation==mine,!closed,upcoming.episodeId==selection.episode.id else {return}
+                nextEpisode=upcoming.nextEpisode
+                var queue=try await api.queue()
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                if queue.current?.id != selection.episode.id || queue.autoplay != autoplay {
+                    queue=try await api.seedQueue(episode:selection.episode.id,revision:queue.revision,autoplay:autoplay)
+                }
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                queueSnapshot=queue
+                nextEpisode=queue.successor(of:selection.episode.id)
+            } catch {
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                // Do not replay a conflicting mutation. Metadata alone can still
+                // offer an explicit next action; autoplay needs a coherent queue.
+                queueSnapshot=nil
+                if (error as? WatchHTTPError)?.status==409,
+                   let latest=try? await api.queue(),!Task.isCancelled,generation==mine,!closed {
+                    if latest.current?.id==selection.episode.id,latest.autoplay==autoplay {queueSnapshot=latest;nextEpisode=latest.successor(of:selection.episode.id)}
+                }
+            }
+        }
+    }
+    func dismissSkip(_ marker:PlaybackInterval) {dismissedSkipIDs.insert(marker.id);objectWillChange.send()}
+    func skip(_ marker:PlaybackInterval) {
+        guard skipMarkers.contains(marker),marker.contains(position),marker.valid(duration:duration) else {return}
+        jump(to:marker.end,resume:isPlaying)
+    }
+    func selectChapter(_ chapter:PlaybackInterval) {
+        guard chapters.contains(chapter),chapter.valid(duration:duration) else {return}
+        jump(to:chapter.start,resume:isPlaying)
+    }
+    func setAutoplay(_ enabled:Bool) {
+        autoplay=enabled;UserDefaults.standard.set(enabled,forKey:"watch.autoplayNext")
+        cancelCountdown()
+        guard !finished,let queue=queueSnapshot,queue.current?.id==selection.episode.id else {return}
+        let mine=generation
+        planningTask?.cancel()
+        planningTask=Task { [weak self] in
+            guard let self else {return}
+            do {
+                let updated=try await api.seedQueue(episode:selection.episode.id,revision:queue.revision,autoplay:enabled)
+                guard !Task.isCancelled,generation==mine,!closed else {return};queueSnapshot=updated
+            } catch {
+                guard !Task.isCancelled,generation==mine,!closed else {return};queueSnapshot=nil
+                if (error as? WatchHTTPError)?.status==409,
+                   let latest=try? await api.queue(),!Task.isCancelled,generation==mine,!closed,
+                   latest.current?.id==selection.episode.id,latest.autoplay==enabled {queueSnapshot=latest}
+            }
+        }
+    }
+    func cancelCountdown() {countdownTask?.cancel();countdownTask=nil;countdown=nil}
+    func completeEpisode() {
+        creditsCue=nil
+        cancelCountdown();planningTask?.cancel();showUpNext=true
+        guard let ticket else {return}
+        let mine=generation;let episode=selection.episode.id;let at=position;let queue=queueSnapshot
+        completionTask=Task { [weak self] in
+            guard let self else {return}
+            do {
+                try await api.saveCompletion(ticket:ticket,position:at)
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                guard let queue,queue.current?.id==episode else {return}
+                let updated=try await api.advanceQueue(episode:episode,revision:queue.revision)
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                queueSnapshot=updated;nextEpisode=updated.current?.available == false ? nil : updated.current
+                if autoplay,updated.autoplay,nextEpisode != nil {startCountdown(generation:mine)}
+            } catch {
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                // A lost response may have advanced on the server. Never repeat
+                // the completion mutation automatically or start media on doubt.
+                queueSnapshot=nil;nextMessage="Automatic continuation is unavailable. You can choose Play next."
+                if (error as? WatchHTTPError)?.status==409,
+                   let latest=try? await api.queue(),!Task.isCancelled,generation==mine,!closed {
+                    if latest.current?.id != episode {nextEpisode=latest.current?.available == false ? nil : latest.current}
+                }
+            }
+        }
+    }
+    func startCountdown(generation mine:Int) {
+        cancelCountdown();countdown=10
+        countdownTask=Task { [weak self] in
+            guard let self else {return}
+            for remaining in stride(from:9,through:0,by:-1) {
+                do {try await Task.sleep(for:.seconds(1))} catch {return}
+                guard !Task.isCancelled,generation==mine,!closed,finished,error==nil,showUpNext else {return}
+                countdown=remaining
+            }
+            countdown=nil;playNext()
+        }
+    }
+    func openUpNext() {creditsCue=nil;showUpNext=true}
+    func dismissCreditsCue() {creditsCue=nil}
+    func hideUpNext() {cancelCountdown();showUpNext=false}
+    func playNext() {
+        guard !switchingEpisode,let next=nextEpisode,next.available != false else {return}
+        cancelCountdown();switchingEpisode=true;nextMessage=nil
+        let mine=generation
+        transitionTask=Task { [weak self] in
+            guard let self else {return}
+            defer {switchingEpisode=false}
+            do {
+                // Resolve current catalogue membership only on the user's action
+                // or completed countdown. This fetch does not prepare any video.
+                let library=try await api.library()
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                guard let programme=library.first(where:{$0.episodes.contains {$0.id==next.id}}),let episode=programme.episodes.first(where:{$0.id==next.id}) else {
+                    nextMessage="That episode is no longer available.";nextEpisode=nil;creditsCue=nil;showUpNext=true;return
+                }
+                if let ticket {
+                    await api.progress(ticket:ticket,position:position,completed:finished)
+                    await api.release(ticket:ticket)
+                }
+                guard !Task.isCancelled,generation==mine,!closed else {return}
+                ticket=nil
+                completionTask?.cancel();selection=PlaybackSelection(programme:programme,episode:episode,position:0)
+                position=0;hasStarted=false;showUpNext=false;nextMessage=nil;completionGate.reset();creditsState.reset();dismissedSkipIDs=[]
+                begin(at:0)
+            } catch {if !Task.isCancelled,generation==mine,!closed {nextMessage="Could not load the next episode. Please try again.";creditsCue=nil;showUpNext=true}}
+        }
     }
     func close() {
         guard !closed else { return }; closed=true; generation += 1; task?.cancel(); watchdog?.cancel(); player.pause()
+        extrasTask?.cancel();planningTask?.cancel();completionTask?.cancel();transitionTask?.cancel();cancelCountdown()
         if let timeObserver { player.removeTimeObserver(timeObserver) }; timeObserver=nil
         status=nil; itemStatus=nil
         if let ended { NotificationCenter.default.removeObserver(ended) }; if let stalled { NotificationCenter.default.removeObserver(stalled) };if let failedToEnd { NotificationCenter.default.removeObserver(failedToEnd) }
         if let ticket { let final=position; let completed=finished; Task { await api.progress(ticket:ticket,position:final,completed:completed); await api.release(ticket:ticket) } }; ticket=nil
-        player.replaceCurrentItem(with:nil);fairPlay?.stop();fairPlay=nil;itvHTTP?.cancel();itvHTTP=nil
+        bbcUHD.stop();player.replaceCurrentItem(with:nil);fairPlay?.stop();fairPlay=nil;itvHTTP?.cancel();itvHTTP=nil
     }
 }
 
@@ -253,22 +502,32 @@ struct NativePlayer: UIViewControllerRepresentable {
         return controller
     }
     func updateUIViewController(_ controller:AVPlayerViewController,context:Context) {
-        controller.showsPlaybackControls = !customTransport
-        controller.view.isUserInteractionEnabled = !customTransport
+        controller.showsPlaybackControls = !customTransport && !model.showUpNext
+        controller.view.isUserInteractionEnabled = !customTransport && !model.showUpNext
+        // AVKit's transport can retain a UIKit focus item even with hit testing
+        // disabled. Remove its view from focus eligibility while our card owns
+        // the remote; hiding the view does not pause or replace the stream.
+        if controller.view.isHidden != model.showUpNext {
+            controller.view.isHidden=model.showUpNext
+            controller.setNeedsFocusUpdate()
+        }
         controller.contentOverlayView?.isHidden=customTransport
         guard !customTransport else { return }
         context.coordinator.install(in:controller)
         context.coordinator.update(item:model.player.currentItem,metadata:model.metadata)
-        guard !model.selection.programme.live && !model.nativeTransport else { controller.transportBarCustomMenuItems=[]; return }
-        var actions=[UIAction(title:"Start over",image:UIImage(systemName:"backward.end.fill")) { _ in model.jump(to:0) }]
-        let duration=model.metadata?.durationSeconds ?? model.selection.episode.durationSeconds ?? 0
-        if duration>0 {
-            for second in stride(from:300,to:Int(duration),by:300) {
-                actions.append(UIAction(title:String(format:"%d:%02d",second/60,second%60)) { _ in model.jump(to:Double(second)) })
-            }
+        guard !model.selection.programme.live else {controller.transportBarCustomMenuItems=[];return}
+        var menus:[UIMenu]=[]
+        if !model.chapters.isEmpty {
+            let actions=model.chapters.map {chapter in UIAction(title:chapter.title+" · "+EpisodeTimeline.time(chapter.start)) {_ in model.selectChapter(chapter)}}
+            menus.append(UIMenu(title:"Chapters",image:UIImage(systemName:"list.bullet"),children:actions))
         }
-        controller.transportBarCustomMenuItems=[UIMenu(title:"Go to…",image:UIImage(systemName:"clock.arrow.circlepath"),children:actions)]
+        var extras:[UIAction]=[]
+        if let marker=model.activeSkip {extras.append(UIAction(title:marker.kind == "recap" ? "Skip recap" : "Skip intro",image:UIImage(systemName:"forward.end")) {_ in model.skip(marker)})}
+        if model.nextEpisode != nil {extras.append(UIAction(title:"Up next",image:UIImage(systemName:"play.rectangle.on.rectangle")) {_ in model.openUpNext()})}
+        if !extras.isEmpty {menus.append(UIMenu(title:"Episode",image:UIImage(systemName:"ellipsis.circle"),children:extras))}
+        controller.transportBarCustomMenuItems=menus
     }
+
     @MainActor final class Coordinator: NSObject, @preconcurrency AVPlayerViewControllerDelegate {
         private var installed=false
         private let badge=UIVisualEffectView(effect:UIBlurEffect(style:.dark))
@@ -344,6 +603,7 @@ struct NativePlayer: UIViewControllerRepresentable {
 struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model:PlaybackModel
+    @State private var showingChapters=false
     init(selection:PlaybackSelection) { _model=StateObject(wrappedValue:PlaybackModel(api:WatchAPI(),selection:selection)) }
     private var startupArtwork:String? {
         if model.selection.programme.live { return model.metadata?.artwork ?? model.selection.programme.guide?.now?.image ?? model.selection.programme.artwork }
@@ -352,9 +612,9 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            NativePlayer(model:model,customTransport:!model.selection.programme.live && !model.nativeTransport).ignoresSafeArea()
-            if !model.selection.programme.live && !model.nativeTransport && model.error == nil && !model.needsChannel5SignIn && model.signInProvider == nil {
-                EpisodeTransport(model:model,close:{ dismiss() })
+            NativePlayer(model:model,customTransport:true).ignoresSafeArea()
+            if model.error == nil && !model.needsChannel5SignIn && model.signInProvider == nil {
+                EpisodeTransport(model:model,close:{ dismiss() },chapters:{showingChapters=true}).disabled(model.showUpNext || model.creditsCue != nil || model.activeSkip != nil)
             }
             if !model.hasStarted && model.error == nil && !model.needsChannel5SignIn && model.signInProvider == nil {
                 WarmupScreen(programme:model.selection.programme,episode:model.selection.episode,
@@ -362,6 +622,18 @@ struct PlayerScreen: View {
                              status:model.reconnecting ? "Reconnecting" : "Starting playback")
             } else if (model.buffering || model.reconnecting) && model.error == nil {
                 ProgressView().scaleEffect(1.15).padding(28).background(.ultraThinMaterial,in:RoundedRectangle(cornerRadius:18)).allowsHitTesting(false)
+            }
+            if let marker=model.activeSkip {
+                VStack {Spacer();HStack {Spacer();SkipIntervalCue(model:model,marker:marker)}}
+                    .padding(.trailing,88).padding(.bottom,160)
+            }
+            if model.creditsCue != nil,let next=model.nextEpisode,!model.showUpNext,model.error == nil,!model.buffering {
+                VStack {Spacer();HStack {Spacer();CreditsUpNextCard(model:model,next:next)}}
+                    .padding(.trailing,88).padding(.bottom,80)
+            }
+            if model.showUpNext && model.error == nil {
+                Color.black.opacity(0.6).ignoresSafeArea()
+                EpisodeUpNextPanel(model:model,close:{dismiss()})
             }
             if let provider=model.signInProvider {ProviderSignIn(provider:provider,onConnected:{model.retry()}).frame(width:1050).background(.black)}
             if model.needsChannel5SignIn {
@@ -379,6 +651,8 @@ struct PlayerScreen: View {
                 }.padding(44).background(.regularMaterial,in:RoundedRectangle(cornerRadius:24))
             }
         }.task { model.begin() }.onDisappear { model.close() }
+            .sheet(isPresented:$showingChapters) {EpisodeChapters(model:model,close:{showingChapters=false})}
+
     }
 }
 
@@ -405,6 +679,7 @@ private struct TransportControlStyle:ButtonStyle {
 struct EpisodeTransport:View {
     @ObservedObject var model:PlaybackModel
     let close:()->Void
+    var chapters:()->Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible=true
     @State private var preview:Double?
@@ -412,7 +687,7 @@ struct EpisodeTransport:View {
     @State private var lastStep=Date.distantPast
     @State private var activity=UUID()
     @FocusState private var focus:Control?
-    private enum Control:Hashable { case timeline,play,restart,close,screen }
+    private enum Control:Hashable { case timeline,play,restart,close,screen,chapters,next }
     private var selection:Programme { model.selection.programme }
     private var shown:Double { preview ?? model.position }
     private var fraction:Double { model.duration>0 ? min(1,max(0,shown/model.duration)) : 0 }
@@ -426,8 +701,6 @@ struct EpisodeTransport:View {
             if visible {
                 VStack(alignment:.leading) {
                     HStack(alignment:.top) {
-                        CardBrands(items:model.metadata?.brands ?? model.selection.episode.brands)
-                        if let rating=selection.contentRating { RatingBadge(rating:rating) }
                         Spacer()
                         if let quality=model.quality {
                             Text(quality).font(.system(size:23,weight:.semibold)).padding(.horizontal,15).padding(.vertical,8)
@@ -436,16 +709,22 @@ struct EpisodeTransport:View {
                     }
                     Spacer()
                     VStack(alignment:.leading,spacing:16) {
-                        HStack(alignment:.center,spacing:30) {
-                            ProgrammeTitle(programme:selection,large:false).frame(width:380,height:75,alignment:.leading)
-                            VStack(alignment:.leading,spacing:8) {
-                                if model.selection.episode.title != selection.title {
-                                    Text(model.selection.episode.title).font(.system(size:26,weight:.semibold)).lineLimit(1)
+                        HStack(alignment:.bottom,spacing:30) {
+                            if selection.live {
+                                VStack(spacing:12) {
+                                    Brands(items:model.metadata?.brands ?? model.selection.episode.brands)
+                                    Artwork(source:model.metadata?.channelLogo ?? selection.channelLogo,fit:true,maxPixel:400).frame(width:160,height:75)
                                 }
-                                Text(model.selection.episode.description ?? selection.description ?? "")
+                            } else {ProgrammeTitle(programme:selection,large:false,centered:true,width:380,height:75,maxLogoHeight:200,reserveHeadroom:false,providerEyebrow:true,brandItems:model.metadata?.brands ?? model.selection.episode.brands,rating:selection.contentRating)}
+                            VStack(alignment:.leading,spacing:8) {
+                                if selection.live || model.selection.episode.title != selection.title {
+                                    Text(selection.live ? (model.metadata?.title ?? selection.guide?.now?.title ?? selection.title) : model.selection.episode.title).font(.system(size:26,weight:.semibold)).lineLimit(1)
+                                }
+                                Text(selection.live ? (model.metadata?.description ?? selection.guide?.now?.subtitle ?? "") : (model.selection.episode.description ?? selection.description ?? ""))
                                     .font(.system(size:22)).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
                             }.frame(maxWidth:.infinity,alignment:.leading)
                         }
+                        if !selection.live {
                         Button { commit() } label:{
                             VStack(spacing:12) {
                                 GeometryReader { proxy in
@@ -472,14 +751,29 @@ struct EpisodeTransport:View {
                                 else if direction == .right { move(1) }
                                 else if direction == .down { cancelPreview();focus = .play }
                             }
+                        } else {
+                            HStack(spacing:12) {
+                                Circle().fill(.red).frame(width:9,height:9)
+                                Text("LIVE").font(.system(size:19,weight:.bold))
+                                if !model.isPlaying {Text("Paused").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)}
+                                Spacer()
+                                Text(selection.guide?.now?.time ?? "").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
+                            }.padding(.vertical,12)
+                        }
                         HStack(spacing:25) {
                             Button { preview == nil ? model.toggle() : commit();touch() } label:{ Label(model.isPlaying ? "Pause" : "Play",systemImage:model.isPlaying ? "pause.fill" : "play.fill") }
                                 .buttonStyle(TransportControlStyle(selected:focus == .play)).focusEffectDisabled().focused($focus,equals:.play)
-                            Button { preview=nil;model.jump(to:0);touch() } label:{ Label("Start over",systemImage:"backward.end") }.buttonStyle(TransportControlStyle(selected:focus == .restart)).focusEffectDisabled().focused($focus,equals:.restart)
+                            Button { preview=nil;if selection.live {model.goLive()} else {model.jump(to:0)};touch() } label:{ Label(selection.live ? "Go live" : "Start over",systemImage:selection.live ? "dot.radiowaves.left.and.right" : "backward.end") }.buttonStyle(TransportControlStyle(selected:focus == .restart)).focusEffectDisabled().focused($focus,equals:.restart)
+                            if !model.chapters.isEmpty {
+                                Button("Chapters") {chapters();touch()}.buttonStyle(TransportControlStyle(selected:focus == .chapters)).focusEffectDisabled().focused($focus,equals:.chapters)
+                            }
+                            if model.nextEpisode != nil {
+                                Button("Up next") {model.openUpNext();touch()}.buttonStyle(TransportControlStyle(selected:focus == .next)).focusEffectDisabled().focused($focus,equals:.next)
+                            }
                             Spacer()
                             Button("Back to library",action:close).buttonStyle(TransportControlStyle(selected:focus == .close)).focusEffectDisabled().focused($focus,equals:.close)
                         }.font(.system(size:23,weight:.medium))
-                            .onMoveCommand { if $0 == .up { model.pause();focus = .timeline;touch() } }
+                            .onMoveCommand { if $0 == .up && !selection.live { model.pause();focus = .timeline;touch() } }
                     }
                 }.padding(.horizontal,88).padding(.vertical,60)
                     .background(LinearGradient(stops:[.init(color:.black.opacity(0.45),location:0),.init(color:.clear,location:0.2),.init(color:.clear,location:0.42),.init(color:.black.opacity(0.93),location:0.83),.init(color:.black,location:1)],startPoint:.top,endPoint:.bottom))
@@ -516,4 +810,117 @@ struct EpisodeTransport:View {
         focus = .play;touch()
     }
     private func cancelPreview() { preview=nil;repeats=0;touch() }
+}
+
+struct EpisodeUpNextPanel:View {
+    @ObservedObject var model:PlaybackModel
+    let close:()->Void
+    @FocusState private var focused:Bool
+    var body:some View {
+        VStack(alignment:.leading,spacing:24) {
+            HStack {
+                Text(model.countdown.map {"Up next in \($0) seconds"} ?? (model.nextEpisode == nil ? "Episode finished" : "Up next"))
+                    .font(.system(size:32,weight:.semibold)).monospacedDigit()
+                Spacer()
+            }
+            if let next=model.nextEpisode {
+                HStack(alignment:.top,spacing:30) {
+                    Artwork(source:next.thumbnail ?? next.artwork,maxPixel:900).frame(width:340,height:191).clipShape(RoundedRectangle(cornerRadius:16))
+                    VStack(alignment:.leading,spacing:12) {
+                        Text(next.showTitle ?? model.selection.programme.title).font(.system(size:22)).foregroundStyle(WatchDesign.muted)
+                        Text(next.title).font(.system(size:29,weight:.semibold)).lineLimit(2)
+                        Text(next.caption).font(.system(size:20)).foregroundStyle(WatchDesign.muted)
+                        if let description=next.description {Text(description).font(.system(size:21)).lineLimit(3).foregroundStyle(.white.opacity(0.8))}
+                    }
+                }
+            }
+            if let message=model.nextMessage {Text(message).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)}
+            HStack(spacing:25) {
+                if model.nextEpisode != nil {
+                    Button(model.switchingEpisode ? "Loading…" : "Play next") {model.playNext()}.disabled(model.switchingEpisode).focused($focused)
+                }
+                if model.countdown != nil {
+                    Button("Cancel autoplay") {model.cancelCountdown()}
+                } else {
+                    Button("Close") {model.hideUpNext()}
+                }
+                Spacer()
+                Button("Back to library",action:close)
+            }.font(.system(size:23,weight:.medium))
+            Toggle("Autoplay next episode",isOn:Binding(get:{model.autoplay},set:{model.setAutoplay($0)})).font(.system(size:21))
+        }.padding(42).frame(width:1120).background(Color(white:0.06),in:RoundedRectangle(cornerRadius:24))
+            .overlay {RoundedRectangle(cornerRadius:24).strokeBorder(.white.opacity(0.12),lineWidth:1)}
+            .focusSection()
+            .task {await Task.yield();focused=true}
+            .onExitCommand {model.hideUpNext()}
+    }
+}
+struct EpisodeChapters:View {
+    @ObservedObject var model:PlaybackModel
+    let close:()->Void
+    var body:some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:20) {
+                Text("Chapters").font(WatchDesign.heading).padding(.bottom,12)
+                ForEach(model.chapters) {chapter in
+                    Button {model.selectChapter(chapter);close()} label:{
+                        HStack(spacing:24) {
+                            Text(EpisodeTimeline.time(chapter.start)).monospacedDigit().foregroundStyle(WatchDesign.muted)
+                            Text(chapter.title).lineLimit(2)
+                            Spacer()
+                            if chapter.contains(model.position) {Image(systemName:"waveform")}
+                        }.font(WatchDesign.body).padding(16).frame(maxWidth:.infinity,alignment:.leading)
+                    }
+                }
+                Button("Close",action:close).padding(.top,12)
+            }.padding(64)
+        }.frame(width:1100).background(WatchDesign.canvas).onExitCommand(perform:close)
+    }
+}
+
+
+struct CreditsUpNextCard:View {
+    @ObservedObject var model:PlaybackModel
+    let next:NextEpisode
+    @FocusState private var playFocused:Bool
+    var body:some View {
+        VStack(alignment:.leading,spacing:18) {
+            Text("Up next").font(.system(size:22,weight:.semibold)).foregroundStyle(WatchDesign.muted)
+            HStack(alignment:.top,spacing:22) {
+                Artwork(source:next.thumbnail ?? next.artwork,maxPixel:600)
+                    .frame(width:220,height:124).clipShape(RoundedRectangle(cornerRadius:12))
+                VStack(alignment:.leading,spacing:8) {
+                    Text(next.showTitle ?? model.selection.programme.title).font(.system(size:19)).foregroundStyle(WatchDesign.muted).lineLimit(1)
+                    Text(next.title).font(.system(size:24,weight:.semibold)).lineLimit(2)
+                    Text(next.caption).font(.system(size:18)).foregroundStyle(WatchDesign.muted).lineLimit(1)
+                }.frame(maxWidth:.infinity,alignment:.leading)
+            }
+            HStack(spacing:24) {
+                Button(model.switchingEpisode ? "Loading…" : "Play next") {model.playNext()}
+                    .disabled(model.switchingEpisode).focused($playFocused)
+                Button("Keep watching") {model.dismissCreditsCue()}
+            }.font(.system(size:22,weight:.medium))
+        }.padding(28).frame(width:760)
+            .background(Color(white:0.06).opacity(0.97),in:RoundedRectangle(cornerRadius:22))
+            .overlay {RoundedRectangle(cornerRadius:22).strokeBorder(.white.opacity(0.15),lineWidth:1)}
+            .focusSection().task {await Task.yield();playFocused=true}
+            .onExitCommand {model.dismissCreditsCue()}
+            .onPlayPauseCommand {model.toggle()}
+    }
+}
+
+struct SkipIntervalCue:View {
+    @ObservedObject var model:PlaybackModel
+    let marker:PlaybackInterval
+    @FocusState private var focused:Bool
+    var body:some View {
+        HStack(spacing:24) {
+            Button(marker.kind == "recap" ? "Skip recap" : "Skip intro") {model.skip(marker)}.focused($focused)
+            Button("Keep watching") {model.dismissSkip(marker)}
+        }.font(.system(size:23,weight:.medium)).padding(24)
+            .background(Color(white:0.06).opacity(0.95),in:RoundedRectangle(cornerRadius:18))
+            .focusSection().task(id:marker.id) {await Task.yield();focused=true}
+            .onExitCommand {model.dismissSkip(marker)}
+            .onPlayPauseCommand {model.toggle()}
+    }
 }

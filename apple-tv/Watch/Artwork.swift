@@ -4,10 +4,12 @@ import ImageIO
 // A single television layout scale, shared by every catalogue and detail screen.
 enum WatchDesign {
     static let canvas=Color.black
-    static let inset:CGFloat=88
-    static let gap:CGFloat=36
+    static let inset:CGFloat=64
+    static let gap:CGFloat=40
     static let cardInset:CGFloat=16
     static let radius:CGFloat=20
+    static let heroHeight:CGFloat=440
+    static let heroArtworkHeight:CGFloat=560
     static let heading:Font = .system(size:34,weight:.semibold)
     static let title:Font = .system(size:24,weight:.semibold)
     static let body:Font = .system(size:23)
@@ -15,7 +17,10 @@ enum WatchDesign {
     static let muted=Color.white.opacity(0.65)
     static func columns(_ width:CGFloat) -> Int { width>=1600 ? 4 : (width>=1100 ? 3 : 2) }
     static func cardWidth(_ width:CGFloat) -> CGFloat {
-        floor((width-inset*2-gap*CGFloat(columns(width)-1))/CGFloat(columns(width)))
+        floor(max(1,width-inset*2-gap*CGFloat(columns(width)-1))/CGFloat(columns(width)))
+    }
+    static func gridColumns(_ width:CGFloat)->[GridItem] {
+        Array(repeating:GridItem(.fixed(cardWidth(width)),spacing:gap,alignment:.topLeading),count:columns(width))
     }
 }
 private struct CardWidthKey:EnvironmentKey { static let defaultValue:CGFloat=409 }
@@ -23,6 +28,47 @@ private struct CardColumnsKey:EnvironmentKey { static let defaultValue=4 }
 extension EnvironmentValues {
     var watchCardWidth:CGFloat { get { self[CardWidthKey.self] } set { self[CardWidthKey.self]=newValue } }
     var watchColumns:Int { get { self[CardColumnsKey.self] } set { self[CardColumnsKey.self]=newValue } }
+}
+
+// Measure inside each navigation page. Tab/navigation safe areas can make a
+// page narrower than the TV; full-screen dimensions must not size its cards.
+struct WatchContentViewport<Content:View>:View {
+    let content:(CGFloat)->Content
+    init(@ViewBuilder content:@escaping(CGFloat)->Content) {self.content=content}
+    var body:some View {
+        GeometryReader {proxy in
+            content(proxy.size.width)
+                .frame(width:proxy.size.width,height:proxy.size.height,alignment:.topLeading)
+                .environment(\.watchCardWidth,WatchDesign.cardWidth(proxy.size.width))
+                .environment(\.watchColumns,WatchDesign.columns(proxy.size.width))
+        }
+    }
+}
+struct WatchCardButtonStyle:ButtonStyle {
+    @Environment(\.isFocused) private var focused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration:Configuration)->some View {
+        configuration.label
+            .overlay {RoundedRectangle(cornerRadius:WatchDesign.radius).strokeBorder(.white.opacity(focused ? 0.9 : 0),lineWidth:3)}
+            .scaleEffect(configuration.isPressed ? 0.985 : (focused ? 1.025 : 1))
+            .shadow(color:.black.opacity(focused ? 0.4 : 0),radius:16,y:8)
+            .animation(reduceMotion ? nil : .easeOut(duration:0.16),value:focused)
+            .animation(reduceMotion ? nil : .easeOut(duration:0.12),value:configuration.isPressed)
+    }
+}
+struct WatchActionButtonStyle:ButtonStyle {
+    @Environment(\.isFocused) private var focused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var prominent=false
+    func makeBody(configuration:Configuration)->some View {
+        configuration.label
+            .foregroundStyle(focused ? Color.black : Color.white)
+            .padding(.horizontal,24).padding(.vertical,15)
+            .background(focused ? Color.white : Color.white.opacity(prominent ? 0.20 : 0.10),in:RoundedRectangle(cornerRadius:14))
+            .overlay {RoundedRectangle(cornerRadius:14).strokeBorder(.white.opacity(focused ? 1 : 0.12),lineWidth:1)}
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration:0.16),value:focused)
+    }
 }
 
 // Downsample before displaying; moving focus should not decode full-size hero images.
@@ -106,38 +152,73 @@ struct ProgrammeTitle:View {
     let programme:Programme
     var large=true
     var centered=false
+    var width:CGFloat=520
+    var height:CGFloat=100
+    var maxLogoHeight:CGFloat=140
+    var reserveHeadroom=true
+    var providerEyebrow=false
+    var brandItems:[Brand]?=nil
+    var rating:String?=nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var logo:UIImage?
+    private var brands:[Brand] {brandItems ?? programme.brands}
+    private var hasEyebrow:Bool {providerEyebrow && (!brands.isEmpty || rating != nil)}
+    private var size:CGSize {logo.map {ClearLogoLayout.size(image:$0.size,width:width,maxHeight:maxLogoHeight)} ?? .zero}
     var body:some View {
         Group {
-            if let logo=programme.showLogo,let url=URL(string:logo) {
-                AsyncImage(url:url) { phase in
-                    if let image=phase.image { image.resizable().scaledToFit() }
-                    else { titleText }
+            if let logo {
+                VStack(alignment:centered ? .center : .leading,spacing:12) {
+                    if hasEyebrow { eyebrow }
+                    Image(uiImage:logo).resizable().interpolation(.high)
+                        .frame(width:size.width,height:size.height)
                 }
-            } else { titleText }
-        }.frame(maxWidth:520,maxHeight:110,alignment:centered ? .center : .leading)
-         .accessibilityLabel(programme.title)
+                .fixedSize(horizontal:false,vertical:true)
+                .frame(width:width,height:height+(hasEyebrow ? 44 : 0),alignment:centered ? .bottom : .bottomLeading)
+                .padding(.top,reserveHeadroom ? max(0,maxLogoHeight-height) : 0)
+            } else {
+                VStack(alignment:centered ? .center : .leading,spacing:12) {
+                    if hasEyebrow { eyebrow }
+                    Text(programme.title).font(.system(size:large ? 46 : 36,weight:.bold))
+                        .multilineTextAlignment(centered ? .center : .leading)
+                        .fixedSize(horizontal:false,vertical:true)
+                }
+                .frame(width:width,alignment:centered ? .center : .leading)
+                .frame(minHeight:height+(hasEyebrow ? 44 : 0),alignment:centered ? .bottom : .bottomLeading)
+            }
+        }
+            .accessibilityLabel(programme.title)
+            .task(id:programme.showLogo) {
+                logo=nil
+                guard let source=programme.showLogo else {return}
+                let loaded=await ArtworkCache.shared.image(source,maxPixel:1400)
+                guard !Task.isCancelled else {return}
+                withAnimation(reduceMotion ? nil : .easeOut(duration:0.18)) {logo=loaded}
+            }
     }
-    private var titleText:some View {
-        Text(programme.title).font(.system(size:large ? 46 : 36,weight:.bold)).lineLimit(2).minimumScaleFactor(0.85)
-            .multilineTextAlignment(centered ? .center : .leading)
+    private var eyebrow:some View {
+        HStack(spacing:20) {
+            Brands(items:brands)
+            if let rating {RatingBadge(rating:rating)}
+        }.frame(height:32)
     }
+
 }
 struct HeroArtwork:View {
     let source:String?
-    var height:CGFloat=440
+    var height:CGFloat=WatchDesign.heroHeight
     var body:some View {
-        GeometryReader { proxy in
-            ZStack(alignment:.trailing) {
+        GeometryReader {proxy in
+            let imageHeight=max(height,WatchDesign.heroArtworkHeight)
+            ZStack(alignment:.topTrailing) {
                 Color.black
-                // Fill a 16:9 box sized from HEIGHT, not the whole screen width.
-                // The image stays flush right; the left side remains clean for text.
-                Artwork(source:source,maxPixel:2000)
-                    .frame(width:height*16/9,height:height)
+                Artwork(source:source,maxPixel:2400)
+                    .frame(width:imageHeight*16/9,height:imageHeight)
                     .overlay {
-                        LinearGradient(stops:[.init(color:.black,location:0),.init(color:.black.opacity(0.45),location:0.25),.init(color:.clear,location:0.6)],startPoint:.leading,endPoint:.trailing)
+                        LinearGradient(stops:[.init(color:.black,location:0),.init(color:.black.opacity(0.45),location:0.25),.init(color:.clear,location:0.5)],startPoint:.leading,endPoint:.trailing)
                     }
                 LinearGradient(stops:[.init(color:.clear,location:0.65),.init(color:.black,location:1)],startPoint:.top,endPoint:.bottom)
-            }.frame(width:proxy.size.width,height:height,alignment:.trailing).clipped()
+                    .frame(height:height)
+            }.frame(width:proxy.size.width,height:height,alignment:.topTrailing).clipped()
         }.frame(height:height)
     }
 }
@@ -185,8 +266,8 @@ struct Tile:View {
                         .font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(2).frame(height:50,alignment:.topLeading)
                 } else {
                     Text(programme.description?.isEmpty == false ? programme.description! : (programme.discoveryRef != nil ? "Explore episodes" : (programme.film ? programme.preferred?.durationText ?? "Film" : programme.episodeCountLabel)))
-                        .font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(3)
-                        .frame(height:75,alignment:.topLeading)
+                        .font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(2)
+                        .frame(height:50,alignment:.topLeading)
                     ProgressView(value:min(1,(programme.resume?.progress ?? 0)/100))
                         .tint(.white).opacity((programme.resume?.resumeSeconds ?? 0)>0 ? 1 : 0)
                         .frame(height:5)
@@ -220,7 +301,7 @@ struct EpisodeTile:View {
                     .clipShape(RoundedRectangle(cornerRadius:12))
                 Text(episode.title).font(WatchDesign.title).lineLimit(2).frame(height:58,alignment:.topLeading)
                 Text(episode.compactCaption).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(1).frame(height:25,alignment:.leading)
-                Text(episode.description ?? "").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(3).frame(height:75,alignment:.topLeading)
+                Text(episode.description ?? "").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(2).frame(height:50,alignment:.topLeading)
                 ProgressView(value:min(1,(episode.progress ?? 0)/100)).tint(.white).opacity((episode.resumeSeconds ?? 0)>0 ? 1 : 0).frame(height:5)
             }
         }.accessibilityElement(children:.combine)
@@ -291,8 +372,7 @@ struct WarmupScreen:View {
                     Artwork(source:metadata?.channelLogo ?? programme.channelLogo,fit:true,maxPixel:480)
                         .frame(width:160,height:64)
                 } else {
-                    Brands(items:programme.brands).frame(height:30)
-                    ProgrammeTitle(programme:programme,centered:true).frame(width:540,height:120)
+                    ProgrammeTitle(programme:programme,centered:true,width:540,height:120,maxLogoHeight:250,providerEyebrow:true)
                 }
                 if !title.isEmpty {
                     Text(title).font(.system(size:programme.live ? 36 : 27,weight:.semibold))

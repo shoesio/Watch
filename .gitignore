@@ -30,3 +30,8 @@ venv/
 build/
 DerivedData/
 xcuserdata/
+
+# Local connection launchers, hardware-specific experiments and review captures
+/tools/
+/home-assistant/phone-review/
+/home-assistant/small-tv-*.png

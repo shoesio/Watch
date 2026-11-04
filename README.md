@@ -11,6 +11,14 @@ Watch brings a shared television library to Apple TV, Home Assistant and Samsung
 
 This repository groups the existing components without changing the running installation. The server folder preserves the installed directory names and imports. Component READMEs describe their existing configuration and operation; paths and network addresses in examples reflect the original Pi installation and should be adapted for another host.
 
+## Latest updates · 4 November 2026
+
+- Apple TV build 30: native BBC 2160p HLG playback, a wider UHD catalogue, Favourites/UHD collections, consistent playback controls, chapters, verified intro/recap skipping, Up next and optional cancellable autoplay.
+- Samsung 0.335: chapters, verified skip markers, Up next and cancellable autoplay, plus the paused-position fix. See [Samsung notes](samsung/README.md) for remote controls and remaining physical checks.
+- Pi host: shared playback-feature APIs and source/version validation, current BBC edition resolution, background UHD discovery, corrected ITV film classification/runtime parsing, and on-demand buffering/pause improvements.
+
+BBC UHD uses the installation owner's privately provisioned setup; no client identity, private key or account session is included. See [validation and release notes](docs/RELEASE-2026-11-04.md), [Apple TV notes](apple-tv/README.md), and the [playback API contract](docs/PLAYBACK-FEATURES-API.md).
+
 ## Screenshots
 
 ### Apple TV

@@ -39,7 +39,7 @@ def show(row):
  latest=row.get('latestAvailableEpisode') or {}
  return {'key':key,'title':title.strip(),'description':row.get('longDescription') or row.get('descriptionEpg') or row.get('description') or row.get('synopsis') or '',
   'artwork':image(row.get('image') or row.get('imageTemplate') or row.get('imageUrl') or row.get('imageHref') or latest.get('imageHref')),
-  'production_id':row.get('productionId'),'genre':' · '.join(genres),'film':row.get('contentType')=='film','page':'https://www.itv.com/watch/'+slug+'/'+key}
+  'production_id':row.get('productionId'),'genre':' · '.join(genres),'film':is_film(row),'page':'https://www.itv.com/watch/'+slug+'/'+key}
 
 def search(query):
  data=get('https://textsearch.prd.oasvc.itv.com/search',broadcaster='itv',featureSet='hls,fairplay,hd',onlyFree='true',platform='dotcom',query=query).json()
@@ -70,22 +70,31 @@ def highlights():
   with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:rows=[s for batch in pool.map(query,['The Chase','The 1% Club','Vera','Unforgotten','The Assembly','The Jonathan Ross Show']) for s in batch]
  return list({s['key']:s for s in rows}.values())
 
+def is_film(row):
+ if row.get('contentType')=='film':return True
+ genres=row.get('genres') or row.get('genre') or []
+ if isinstance(genres,str):genres=[genres]
+ return any(str(g.get('id') or g.get('name') or '').casefold() in ('film','films') if isinstance(g,dict) else str(g).casefold() in ('film','films') for g in genres)
+
 def duration(value):
  if isinstance(value,(int,float)):return float(value)
- m=re.fullmatch(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?',str(value or ''))
+ text=str(value or '').strip()
+ m=re.fullmatch(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?',text,re.I)
  if m:return sum(int(v or 0)*unit for v,unit in zip(m.groups(),[3600,60,1]))
- m=re.search(r'(\d+)\s*(?:min|m\b)',str(value or ''),re.I)
- return int(m[1])*60 if m else 0
+ parts=re.findall(r'(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b',text,re.I)
+ return sum(int(number)*(3600 if unit.lower().startswith('h') else 60 if unit.lower().startswith('m') else 1) for number,unit in parts)
 
 def details(summary):
  url=summary['page'];p=urlparse(url)
  if p.scheme!='https' or p.hostname!='www.itv.com' or not re.fullmatch(r'/watch/[a-zA-Z0-9-]+/[A-Za-z0-9]+',p.path):raise ValueError('Invalid ITV programme')
  try:data=props(get(url).text)
  except (requests.RequestException,ValueError,KeyError):return latest_details(summary)
+ film=summary['film'] or is_film(data.get('programme') or {})
  episodes=[]
  groups=data.get('seriesList') or ([{'titles':[data['episode']],'seriesLabel':'Episodes'}] if isinstance(data.get('episode'),dict) else [])
  for group in groups:
   for ep in group.get('titles',[]):
+   film=film or is_film(ep)
    endpoint=ep.get('playlistUrl');ident=ep.get('productionId') or ep.get('episodeId')
    tier=ep.get('tier') or []
    if not ident or not playlist(endpoint) or ep.get('premium') or (tier and 'FREE' not in tier):continue
@@ -97,7 +106,7 @@ def details(summary):
    if (start and start>now) or (end and end<=now):continue
    season=ep.get('series') or ep.get('seriesNumber') or re.sub(r'^(?:Series|Season)\s+','',group.get('seriesLabel') or 'Episodes',flags=re.I)
    episodes.append({'id':'itv_'+str(ident),'provider_id':'itv','provider_episode_id':str(ident),'kind':'native','playlist_url':endpoint,'title':ep.get('episodeTitle') or 'Episode','season':season,'episode_number':ep.get('episode') or 0,'description':ep.get('longDescription') or ep.get('description') or '', 'thumbnail':image(ep.get('image') or ep.get('imageUrl')) or summary['artwork'],'duration_seconds':duration(ep.get('duration')),'live':False,'premium':False})
- return {'id':'itv_'+summary['key'],'title':summary['title'],'provider':'ITVX','provider_id':'itv','description':summary['description'],'genre':summary['genre'],'media_type':'movie' if summary['film'] else 'tv','artwork':summary['artwork'],'hero':summary['artwork'],'episodes':list({e['id']:e for e in episodes}.values())}
+ return {'id':'itv_'+summary['key'],'title':summary['title'],'provider':'ITVX','provider_id':'itv','description':summary['description'],'genre':summary['genre'],'media_type':'movie' if film else 'tv','artwork':summary['artwork'],'hero':summary['artwork'],'episodes':list({e['id']:e for e in episodes}.values())}
 
 def live():
  rows=[]

@@ -24,6 +24,27 @@ class StreamTest(unittest.IsolatedAsyncioTestCase):
    finally:await stream.close()
    self.assertFalse(stream.directory.exists())
 
+ async def test_episode_keeps_paused_segments_beyond_the_old_three_minute_window(self):
+  with tempfile.TemporaryDirectory() as folder:
+   path=Path(folder)/'episode.ts'
+   result=await asyncio.to_thread(subprocess.run,['ffmpeg','-nostdin','-v','error','-f','lavfi','-i','testsrc2=size=64x36:rate=5','-t','260','-c:v','libx264','-preset','ultrafast','-g','20','-f','mpegts',str(path)],capture_output=True)
+   self.assertEqual(result.returncode,0)
+   stream=TVStream(Path(folder)/'hls',path.open('rb'),live=False)
+   try:
+    await stream.ready()
+    await asyncio.wait_for(stream.task,20)
+    await asyncio.to_thread(stream.process.wait,10)
+    playlist=(stream.directory/'index.m3u8').read_text()
+    self.assertIn('#EXT-X-PLAYLIST-TYPE:EVENT',playlist)
+    self.assertIn('#EXT-X-START:TIME-OFFSET=0,PRECISE=YES',stream.playlist())
+    self.assertIn('#EXT-X-MEDIA-SEQUENCE:0',playlist)
+    self.assertIn('segment000000.ts',playlist)
+    self.assertTrue((stream.directory/'segment000000.ts').exists())
+    self.assertGreaterEqual(stream.snapshot()['buffer_seconds'],260)
+    self.assertIn('#EXT-X-ENDLIST',playlist)
+   finally:await stream.close()
+   self.assertFalse(stream.directory.exists())
+
  async def test_short_ended_live_input_is_not_reported_ready(self):
   from types import SimpleNamespace
   stream=TVStream.__new__(TVStream);stream.allow_short=False

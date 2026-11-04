@@ -32,7 +32,7 @@ enum PairingStore {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
             if (response as? HTTPURLResponse)?.statusCode == 401 { token = nil; try? PairingStore.save(nil) }
-            throw WatchError(message: (try? JSONDecoder().decode(APIError.self, from: data).error) ?? "The Pi could not complete that request.")
+            throw WatchHTTPError(status:(response as? HTTPURLResponse)?.statusCode ?? 0,message:(try? JSONDecoder().decode(APIError.self, from:data).error) ?? "The Pi could not complete that request.")
         }
         if T.self == Empty.self { return Empty() as! T }
         return try JSONDecoder.watch.decode(T.self, from: data)
@@ -74,7 +74,7 @@ enum PairingStore {
     }
     func prepare(id: String, position: Double, preferDirect:Bool = true) async throws -> Prepared {
         struct Job: Decodable { let job: String }
-        let result: Job = try await request("/prepare", method: "POST", body: ["episode_id": id, "position": position, "native_playback":true, "prefer_direct":preferDirect])
+        let result: Job = try await request("/prepare", method: "POST", body: ["episode_id": id, "position": position, "native_playback":true, "native_channel4_live":true, "prefer_direct":preferDirect])
         do {
             for _ in 0..<180 {
                 try Task.checkCancellation()
@@ -89,6 +89,27 @@ enum PairingStore {
             let _: Empty? = try? await request("/prepare/\(result.job)", method: "DELETE")
             throw error
         }
+    }
+    func playbackCapabilities() async throws -> PlaybackCapabilities {try await request("/playback/capabilities")}
+    private func playbackQuery(_ path:String,_ pairs:[String:String])->String {
+        var parts=URLComponents();parts.queryItems=pairs.sorted {$0.key<$1.key}.map {URLQueryItem(name:$0.key,value:$0.value)}
+        return path+"?"+(parts.percentEncodedQuery ?? "")
+    }
+    func features(episode:String,source:String,version:String?,ticket:String) async throws -> EpisodeFeatures {
+        var pairs=["episode_id":episode,"source_key":source,"ticket":ticket]
+        if let version {pairs["version_id"]=version}
+        return try await request(playbackQuery("/playback/features",pairs))
+    }
+    func upNext(episode:String) async throws -> NextEpisodes {try await request(playbackQuery("/playback/up-next",["episode_id":episode]))}
+    func queue() async throws -> SeriesQueue {try await request("/playback/queue")}
+    func seedQueue(episode:String,revision:Int,autoplay:Bool) async throws -> SeriesQueue {
+        try await request("/playback/queue",method:"POST",body:["episode_id":episode,"expected_revision":revision,"autoplay":autoplay])
+    }
+    func advanceQueue(episode:String,revision:Int) async throws -> SeriesQueue {
+        try await request("/playback/queue/advance",method:"POST",body:["completed_episode_id":episode,"expected_revision":revision])
+    }
+    func saveCompletion(ticket:String,position:Double) async throws {
+        let _:Empty=try await request("/session/"+ticket,method:"POST",body:["position":position,"completed":true])
     }
     func progress(ticket: String, position: Double, completed: Bool = false, state: String? = nil, metrics:[String:Double] = [:]) async {
         let _: Empty? = try? await request("/session/\(ticket)", method: "POST", body: ["position": max(0, position.isFinite ? position : 0), "completed": completed, "state": state ?? "unknown", "metrics":metrics])

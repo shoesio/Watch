@@ -53,7 +53,7 @@ def current_login(self, destination):
         reason = result.get('message')
         if reason == 'accountLocked':
             raise BBCLoginError('BBC reports that the account is locked. Use the BBC website to resolve it.')
-        if reason and ('password' in reason.lower() or 'credential' in reason.lower()):
+        if isinstance(reason,str) and ('password' in reason.lower() or 'credential' in reason.lower()):
             raise BBCLoginError('BBC did not accept the account details. Nothing was saved.')
         raise BBCLoginError('BBC did not complete sign-in. A browser check or email confirmation may be required.')
     parts = urlsplit(callback)

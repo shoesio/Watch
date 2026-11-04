@@ -36,6 +36,12 @@ class LoginTests(unittest.TestCase):
         with self.assertRaises(BBCLoginError):p.login(URL)
         self.assertEqual(h.post.call_count,1)
 
+    def test_structured_failure_is_reported_without_crashing(self):
+        p,h=self.plugin();h.get.return_value=self.initial()
+        h.post.side_effect=[response('',{}),response('',{'message':{'code':'validationFailure'}})]
+        with self.assertRaises(BBCLoginError):p.login(URL)
+        self.assertEqual(h.post.call_count,2)
+
     def test_untrusted_callback_is_not_opened(self):
         p,h=self.plugin();h.get.return_value=self.initial()
         h.post.side_effect=[response('',{}),response('',{'sessionUrl':'https://example.org/callback'})]

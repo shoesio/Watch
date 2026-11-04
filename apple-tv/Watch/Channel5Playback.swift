@@ -125,6 +125,7 @@ struct PlaybackSource: Sendable {
     var fairPlayCertificate: Data?
     var channel5FairPlay: Channel5FairPlayConfig?
     var uFairPlay:UFairPlayConfig?
+    var channel4FairPlay:Channel4FairPlayConfig?
 }
 
 struct UFairPlayConfig:Sendable { let licence:URL;let videoID:String;let created:Date }

@@ -7,6 +7,8 @@ struct BrowseView:View {
     @Environment(\.watchCardWidth) private var cardWidth
     @Environment(\.watchColumns) private var columnCount
     let section:Section
+    private enum BrowseFocus:Hashable {case filter,programme(String)}
+    @FocusState private var browseFocus:BrowseFocus?
     @State private var genre="All genres"
     @State private var path:[String]=[]
     @State private var genreSuggestions:[Programme]=[]
@@ -30,7 +32,14 @@ struct BrowseView:View {
         }
         return section == .films ? result.sorted { ($0.filmRank ?? Int.max) < ($1.filmRank ?? Int.max) } : result
     }
-    private var filtered:[Programme] { genre=="All genres" ? items : items.filter { $0.genres.contains(genre) } }
+    private var favouritesOnly:Bool { genre == "Favourites" }
+    private var uhdOnly:Bool { genre == "UHD" }
+    private var collectionOnly:Bool { favouritesOnly || uhdOnly }
+    private var filtered:[Programme] {
+        if favouritesOnly { return items.filter(\.favourite) }
+        if uhdOnly {return items.filter {$0.uhdAvailable == true}}
+        return genre == "All genres" ? items : items.filter { $0.genres.contains(genre) }
+    }
     private var genres:[String] {
         let available=Set(items.flatMap(\.genres))
         if section == .shows && !genreOrder.isEmpty { return genreOrder.filter { available.contains($0) } }
@@ -39,6 +48,8 @@ struct BrowseView:View {
     private var hero:Programme? { items.sorted { $0.latestProgress > $1.latestProgress }.first }
     var body:some View {
         NavigationStack(path:$path) {
+            WatchContentViewport {availableWidth in
+            let columns=WatchDesign.gridColumns(availableWidth)
             ScrollView {
                 VStack(alignment:.leading,spacing:32) {
                     if section == .home {
@@ -69,40 +80,46 @@ struct BrowseView:View {
                             FeaturedSpotlight(programmes:library.featuredFilms,tab:.films) { play($0) }
                         }
                         HStack(alignment:.center,spacing:32) {
-                            SectionHeading(title:section.rawValue,subtitle:section == .live ? "On now and coming up" : (section == .shows ? "Recently watched and favourites first" : "\(filtered.count) films in your library"))
+                            SectionHeading(title:section.rawValue,subtitle:uhdOnly ? "\(filtered.count) with UHD episodes available" : favouritesOnly ? "\(filtered.count) favourite\(filtered.count == 1 ? "" : "s")" : section == .live ? "On now and coming up" : (section == .shows ? "Recently watched and favourites first" : "\(filtered.count) films in your library"))
                             Spacer(minLength:30)
-                            if section != .live && !genres.isEmpty {
+                            if section == .shows || section == .films {
                                 Menu {
-                                    Picker("Genre",selection:$genre) {
+                                    Picker("Collection",selection:$genre) {
                                         Text("All genres").tag("All genres")
+                                        Label("Favourites",systemImage:"heart.fill").tag("Favourites")
+                                        Label("UHD",systemImage:"4k.tv").tag("UHD")
                                         ForEach(genres,id:\.self) { Text($0).tag($0) }
                                     }
                                 } label: {
-                                    Label(genre,systemImage:"line.3.horizontal.decrease").font(.system(size:23,weight:.medium)).lineLimit(1)
-                                }.accessibilityLabel("Filter \(section.rawValue) by genre: \(genre)")
+                                    Label(genre,systemImage:favouritesOnly ? "heart.fill" : "line.3.horizontal.decrease").font(.system(size:23,weight:.medium)).lineLimit(1)
+                                }.focused($browseFocus,equals:.filter)
+                                .onMoveCommand {direction in
+                                    if direction == .down,let first=(section == .shows && !collectionOnly ? personalShows.first ?? genreSuggestions.first : filtered.first) {browseFocus = .programme(first.id)}
+                                }
+                                .accessibilityLabel("Filter \(section.rawValue) collection: \(genre)")
                             }
-                        }.padding(.horizontal,WatchDesign.inset)
-                        if section == .shows {
+                        }.padding(.horizontal,WatchDesign.inset).focusSection()
+                        if section == .shows && !collectionOnly {
                             if !personalShows.isEmpty {
-                                LazyVGrid(columns:columns,alignment:.leading,spacing:44) {
-                                    ForEach(personalShows) { programme in tileLink(programme) }
+                                LazyVGrid(columns:columns,alignment:.leading,spacing:40) {
+                                    ForEach(Array(personalShows.enumerated()),id:\.element.id) { index,programme in gridTile(programme,topRow:index<columns.count) }
                                 }.padding(.horizontal,WatchDesign.inset).padding(.top,12)
                             }
                         } else {
-                            LazyVGrid(columns:columns,alignment:.leading,spacing:44) {
-                                ForEach(filtered) { programme in tileLink(programme) }
+                            LazyVGrid(columns:columns,alignment:.leading,spacing:40) {
+                                ForEach(Array(filtered.enumerated()),id:\.element.id) { index,programme in gridTile(programme,topRow:index<columns.count) }
                             }.padding(.horizontal,WatchDesign.inset).padding(.top,12)
                         }
-                        if section == .shows {
+                        if section == .shows && !collectionOnly {
                             VStack(alignment:.leading,spacing:24) {
                                 HStack {
                                     SectionHeading(title:personalShows.isEmpty ? "Explore shows" : "More to explore",subtitle:"Ranked for your viewing")
                                     Spacer()
                                     if loadingSuggestions { ProgressView() }
                                 }
-                                LazyVGrid(columns:columns,alignment:.leading,spacing:44) {
+                                LazyVGrid(columns:columns,alignment:.leading,spacing:40) {
                                     ForEach(Array(genreSuggestions.enumerated()),id:\.element.id) { index,programme in
-                                        tileLink(programme).onAppear {
+                                        gridTile(programme,topRow:personalShows.isEmpty && index<columns.count).onAppear {
                                             if index>=genreSuggestions.count-8,nextSuggestionCursor != nil {
                                                 Task { await fetchSuggestions(genre,generation:suggestionGeneration) }
                                             }
@@ -116,8 +133,8 @@ struct BrowseView:View {
                                 }
                             }.padding(.horizontal,WatchDesign.inset).padding(.top,16)
                         }
-                        if filtered.isEmpty && !library.loading && section != .shows {
-                            QuietState(symbol:"line.3.horizontal.decrease",title:"Nothing in this collection yet",message:"Choose another genre or add favourites in your provider accounts.")
+                        if filtered.isEmpty && !library.loading && (section != .shows || collectionOnly) {
+                            QuietState(symbol:favouritesOnly ? "heart" : "line.3.horizontal.decrease",title:uhdOnly ? "No UHD titles available" : favouritesOnly ? "No favourites yet" : "Nothing in this collection yet",message:uhdOnly ? "Titles appear here when the provider lists an available UHD edition. UHD availability may vary by episode." : favouritesOnly ? "Choose Favourite on a \(section == .films ? "film" : "show") to save it here." : "Choose another genre or add favourites in your provider accounts.")
                         }
                     }
                     if library.loading && library.programmes.isEmpty {
@@ -125,7 +142,7 @@ struct BrowseView:View {
                         ProgressView().frame(maxWidth:.infinity)
                     }
                 }.padding(.top,section == .home || section == .films ? 0 : 38).padding(.bottom,72)
-            }.scrollClipDisabled().background(WatchDesign.canvas)
+            }.contentMargins(.horizontal,0,for:.scrollContent).background(WatchDesign.canvas)
             .navigationDestination(for:String.self) { id in
                 if let programme=library.programmes.first(where:{$0.id==id}) { ProgrammeDestination(programme:programme) }
             }
@@ -135,16 +152,18 @@ struct BrowseView:View {
             .onChange(of:path) { old,new in if !old.isEmpty && new.isEmpty { library.routeProgrammeID=nil;if section == .shows { Task { await reloadShows() } } } }
             .task(id:genre) { await reloadShows() }
             .animation(reduceMotion ? nil : .easeInOut(duration:0.2),value:genre)
+            }
         }
     }
     @MainActor private func reloadShows() async {
         guard section == .shows else { return }
         genreSuggestions=[];personalShows=[];suggestionError=false;nextSuggestionCursor=nil;suggestionTotal=0
         suggestionGeneration=UUID();loadingSuggestions=false
+        guard !collectionOnly else { return }
         await fetchSuggestions(genre,generation:suggestionGeneration)
     }
     @MainActor private func fetchSuggestions(_ selected:String,generation:UUID) async {
-        guard !loadingSuggestions,generation==suggestionGeneration,selected==genre else { return }
+        guard selected != "Favourites",selected != "UHD",!loadingSuggestions,generation==suggestionGeneration,selected==genre else { return }
         loadingSuggestions=true;suggestionError=false
         do {
             let result=try await library.api.shows(genre:selected == "All genres" ? nil : selected,cursor:nextSuggestionCursor)
@@ -172,9 +191,15 @@ struct BrowseView:View {
     private func play(_ programme:Programme) {
         if let episode=programme.preferred { library.deepPlay=PlaybackSelection(programme:programme,episode:episode,position:programme.live ? 0 : episode.resumeSeconds ?? 0) }
     }
+    private func gridTile(_ programme:Programme,topRow:Bool)->some View {
+        tileLink(programme).focused($browseFocus,equals:.programme(programme.id))
+            .onMoveCommand {direction in
+                if direction == .up,topRow,section == .shows || section == .films {browseFocus = .filter}
+            }
+    }
     @ViewBuilder private func tileLink(_ programme:Programme) -> some View {
-        if programme.live { Button { play(programme) } label:{ Tile(programme:programme) }.buttonStyle(.card) }
-        else { NavigationLink(value:programme.id) { Tile(programme:programme) }.buttonStyle(.card)
+        if programme.live { Button { play(programme) } label:{ Tile(programme:programme) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled() }
+        else { NavigationLink(value:programme.id) { Tile(programme:programme) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
             .contextMenu { FavouriteButton(programme:programme) }
         }
     }
@@ -190,8 +215,8 @@ struct BrowseView:View {
                             }
                         }
                     }
-                }.padding(.horizontal,WatchDesign.inset).padding(.vertical,18)
-            }.scrollClipDisabled().focusSection()
+                }.scrollTargetLayout().padding(.horizontal,WatchDesign.inset).padding(.vertical,24)
+            }.contentMargins(.horizontal,0,for:.scrollContent).scrollTargetBehavior(.viewAligned).scrollClipDisabled().focusSection()
         }
     }
 }
@@ -240,22 +265,18 @@ struct Hero:View {
     var play:()->Void
     var body:some View {
         ZStack(alignment:.leading) {
-            HeroArtwork(source:programme.hero,height:440)
-            VStack(alignment:.leading,spacing:18) {
-                HStack(spacing:20) {
-                    Brands(items:programme.brands)
-                    if let rating=programme.contentRating { RatingBadge(rating:rating) }
-                }
-                ProgrammeTitle(programme:programme).frame(width:520,height:100,alignment:.leading)
+            HeroArtwork(source:programme.hero,height:WatchDesign.heroHeight)
+            VStack(alignment:.leading,spacing:12) {
+                ProgrammeTitle(programme:programme,width:520,height:100,maxLogoHeight:programme.film ? 180 : 200,reserveHeadroom:false,providerEyebrow:true,rating:programme.contentRating)
                 if programme.film {
                     Text([programme.preferred?.durationText,programme.genres.first].compactMap{$0}.joined(separator:" · "))
                         .font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
                 }
                 Text(details ? (programme.description ?? "") : (programme.resume?.title ?? programme.description ?? ""))
-                    .font(WatchDesign.body).foregroundStyle(.white.opacity(0.82)).lineLimit(3)
-                    .frame(width:600,alignment:.leading)
+                    .font(WatchDesign.body).foregroundStyle(.white.opacity(0.82)).lineLimit(2)
+                    .frame(width:600,height:56,alignment:.topLeading)
                 HStack(spacing:24) {
-                    Button(action:play) { Label(programme.resume == nil ? "Play" : "Resume",systemImage:"play.fill").font(.system(size:24,weight:.semibold)) }.buttonStyle(.borderedProminent).focused($heroFocus,equals:.play)
+                    Button(action:play) { Label(programme.resume == nil ? "Play" : "Resume",systemImage:"play.fill").font(.system(size:24,weight:.semibold)) }.buttonStyle(WatchActionButtonStyle(prominent:true)).focusEffectDisabled().focused($heroFocus,equals:.play)
                     if !details { NavigationLink(value:programme.id) { Text("Details").font(.system(size:24,weight:.medium)) }.focused($heroFocus,equals:.details) }
                     if details { FavouriteButton(programme:programme) }
                     if let previous,let next {
@@ -266,8 +287,10 @@ struct Hero:View {
                             .focused($heroFocus,equals:.next).accessibilityLabel("Next highlight")
                     }
                 }.padding(.top,4)
-            }.padding(.horizontal,WatchDesign.inset).padding(.vertical,24)
-        }.frame(height:440).clipped().accessibilityElement(children:.contain)
+            }.padding(.horizontal,WatchDesign.inset).padding(.bottom,32)
+                .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.bottomLeading)
+                .buttonStyle(WatchActionButtonStyle()).focusEffectDisabled()
+        }.frame(height:WatchDesign.heroHeight).clipped().accessibilityElement(children:.contain)
         .onChange(of:heroFocus) { _,control in focusChanged?(control != nil) }
     }
 }
@@ -284,6 +307,8 @@ struct DetailView:View {
     private var episodes:[Episode] { current.episodes.filter { season=="All episodes" || season.isEmpty || $0.seasonTitle==season } }
     private var columns:[GridItem] { Array(repeating:GridItem(.fixed(cardWidth),spacing:WatchDesign.gap,alignment:.topLeading),count:columnCount) }
     var body:some View {
+        WatchContentViewport {availableWidth in
+        let columns=WatchDesign.gridColumns(availableWidth)
         ScrollView {
             VStack(alignment:.leading,spacing:32) {
                 Hero(programme:current,details:true) { if let episode=current.preferred { start(episode,resume:true) } }
@@ -300,9 +325,9 @@ struct DetailView:View {
                         }
                         Spacer()
                     }.focusSection().padding(.horizontal,WatchDesign.inset)
-                    LazyVGrid(columns:columns,alignment:.leading,spacing:44) {
+                    LazyVGrid(columns:columns,alignment:.leading,spacing:40) {
                         ForEach(episodes) { episode in
-                            Button { start(episode,resume:true) } label:{ EpisodeTile(episode:episode,programme:current) }.buttonStyle(.card)
+                            Button { start(episode,resume:true) } label:{ EpisodeTile(episode:episode,programme:current) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
                         }
                     }.padding(.horizontal,WatchDesign.inset).padding(.top,12)
                 } else {
@@ -326,9 +351,10 @@ struct DetailView:View {
                 }
                 if !current.film { SimilarShows(programme:current) }
             }.padding(.bottom,72)
-        }.scrollClipDisabled().background(WatchDesign.canvas)
+        }.contentMargins(.horizontal,0,for:.scrollContent).background(WatchDesign.canvas)
         .task { await library.refresh(); if season.isEmpty { season=seasons.first ?? "All episodes" } }
         .animation(reduceMotion ? nil : .easeInOut(duration:0.2),value:season)
+        }
     }
     private func start(_ episode:Episode,resume:Bool) { library.deepPlay=PlaybackSelection(programme:current,episode:episode,position:resume ? episode.resumeSeconds ?? 0 : 0) }
 }
@@ -351,9 +377,9 @@ struct SimilarShows:View {
                 Spacer()
                 if loading { ProgressView() }
             }
-            LazyVGrid(columns:columns,alignment:.leading,spacing:44) {
+            LazyVGrid(columns:columns,alignment:.leading,spacing:40) {
                 ForEach(Array(items.enumerated()),id:\.element.id) { index,item in
-                    NavigationLink { ProgrammeDestination(programme:item) } label:{ Tile(programme:item) }.buttonStyle(.card)
+                    NavigationLink { ProgrammeDestination(programme:item) } label:{ Tile(programme:item) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
                         .contextMenu { FavouriteButton(programme:item) }
                         .onAppear {
                             if index>=items.count-8,cursor != nil { Task { await load(generation:generation) } }
@@ -447,6 +473,8 @@ struct SearchView:View {
     private var columns:[GridItem] { Array(repeating:GridItem(.fixed(cardWidth),spacing:WatchDesign.gap,alignment:.topLeading),count:columnCount) }
     var body:some View {
         NavigationStack(path:$path) {
+            WatchContentViewport {availableWidth in
+            let columns=WatchDesign.gridColumns(availableWidth)
             ScrollView {
                 VStack(alignment:.leading,spacing:30) {
                     HStack {
@@ -458,17 +486,17 @@ struct SearchView:View {
                         Text(failed ? "Provider search is temporarily unavailable. Your library results are still shown." : "Some providers are taking longer to respond. Available results are shown below.")
                             .font(WatchDesign.detail).foregroundStyle(.orange.opacity(0.85))
                     }
-                    LazyVGrid(columns:columns,alignment:.leading,spacing:44) {
+                    LazyVGrid(columns:columns,alignment:.leading,spacing:40) {
                         ForEach(query.isEmpty ? recent : results) { programme in
                             if programme.live {
-                                Button { if let episode=programme.preferred { library.deepPlay=PlaybackSelection(programme:programme,episode:episode,position:0) } } label:{ Tile(programme:programme) }.buttonStyle(.card)
-                            } else { NavigationLink(value:programme.id) { Tile(programme:programme) }.buttonStyle(.card) }
+                                Button { if let episode=programme.preferred { library.deepPlay=PlaybackSelection(programme:programme,episode:episode,position:0) } } label:{ Tile(programme:programme) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
+                            } else { NavigationLink(value:programme.id) { Tile(programme:programme) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled() }
                         }
                     }.padding(.top,12)
                     if !query.isEmpty && results.isEmpty && !searching { QuietState(symbol:"magnifyingglass",title:"No matches yet",message:"Try a shorter title or another spelling.") }
                     if query.isEmpty && recent.isEmpty { QuietState(symbol:"magnifyingglass",title:"Something good is waiting",message:"Search a title using your remote, voice or iPhone keyboard.") }
                 }.padding(.horizontal,WatchDesign.inset).padding(.top,38).padding(.bottom,72)
-            }.scrollClipDisabled().searchable(text:$library.searchQuery,prompt:"Search all supported services")
+            }.contentMargins(.horizontal,0,for:.scrollContent).searchable(text:$library.searchQuery,prompt:"Search all supported services")
                 .background(WatchDesign.canvas)
                 .navigationDestination(for:String.self) { id in if let programme=library.programmes.first(where:{$0.id==id}) { ProgrammeDestination(programme:programme) } }
                 .task { await library.refresh() }
@@ -488,6 +516,7 @@ struct SearchView:View {
                         failed=true;searching=false
                     }
                 }
+            }
         }
     }
 }

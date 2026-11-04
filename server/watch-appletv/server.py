@@ -16,6 +16,8 @@ class Gateway:
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.jobs, self.sessions, self.tasks, self.attempts = {}, {}, set(), {}
         self.preparing = asyncio.Lock()
+        from playback_features import PlaybackFeatures
+        self.features=PlaybackFeatures(self.root)
         from suggestion_paging import SuggestionPages
         self.suggestion_pages=SuggestionPages()
         self.guide = bridge.watch_guide
@@ -83,6 +85,8 @@ class Gateway:
             five_synopsis(guide[p['live_channel']],self.discovery.five)
             self.five_live_artwork.enrich(guide[p['live_channel']],self.discovery.five)
         original={p['id']:p for p in catalogue['programmes']}
+        for p in self.read('bbc-uhd-programmes.json',[]):
+            if p['id'] not in original:original[p['id']]=p
         saved=[p for rows in self.read('favourite-programmes.json',{}).values() for p in rows]
         for value in list(self.discovery.imported.values())+ [{'programme':p} for p in saved]:
             p=value['programme']
@@ -92,6 +96,8 @@ class Gateway:
         self.bridge.episodes={e['id']:e for p in catalogue['programmes'] for e in p['episodes']}
         programmes = self.ratings.enrich(self.bridge.watch.project(catalogue, guide))
         programmes = self.episode_artwork.enrich(programmes,self.bridge.watch)
+        from bbc_uhd_catalogue import enrich as enrich_uhd
+        enrich_uhd(programmes,self.read('bbc-uhd-catalogue.json',{}),getattr(self.bridge.watch,'index',{}))
         favourites=self.read('favourites.json',{})
         favourite_dates=self.read('favourite-updated.json',{})
         for programme in programmes:
@@ -115,6 +121,106 @@ class Gateway:
         self.bridge.watch.quality.records=self.read('stream-quality.json',{})
         from live_availability import on_air_channels
         return on_air_channels(programmes,time.time())
+
+    def bind_source_key(self,meta,source):
+        from playback_features import source_key
+        version=getattr(getattr(self.bridge,'watch',None),'index',{}).get(meta.get('id'),{})
+        for candidate,provider in version.get('sources',[]):
+            if candidate.get('id')==source.get('id'):
+                meta['source_key']=source_key(candidate,provider);break
+
+    async def playback_capabilities(self,request):
+        return web.json_response({'schema_version':1,'chapters':True,'skip_markers':['intro','recap'],
+            'series_queue':True,'marker_timebase':'episode','autoplay_owner':'client','preload_supported':False})
+
+    def public_episode(self,rows,ident):
+        from playback_features import episode_row
+        for p in rows:
+            for e in p.get('episodes',[]):
+                if e['id']==ident:return episode_row(p,e)
+        return None
+
+    async def playback_features(self,request):
+        ident=request.query.get('episode_id');version_id=request.query.get('version_id')
+        if version_id is not None and not __import__('re').fullmatch('[A-Za-z0-9_-]{1,100}',version_id):raise web.HTTPBadRequest()
+        self.project();version=self.bridge.watch.index.get(ident)
+        if not version:raise web.HTTPNotFound()
+        source,provider=self.bridge.watch.quality.preferred(version)
+        prepared=None
+        if request.query.get('ticket'):
+            session=self.sessions.get(request.query['ticket'])
+            if not session or session['device']!=self.paired(request) or session['prepared'].get('_watch_meta',{}).get('id')!=ident:raise web.HTTPNotFound()
+            prepared=session['prepared']
+            actual=prepared.get('episode')
+            if actual:
+                pair=next(((s,p) for s,p in version.get('sources',[]) if s.get('id')==actual.get('id')),None)
+                if pair:source,provider=pair
+                else:prepared=None  # Cannot bind these timings to the selected edition.
+            else:prepared=None
+        from playback_features import source_key
+        expected=request.query.get('source_key')
+        if expected and expected!=source_key(source,provider):raise web.HTTPConflict(reason='Playback source changed; refresh features')
+        result=await asyncio.to_thread(self.features.get,source,provider,version_id,prepared)
+        return web.json_response({'episode_id':ident,**result},headers={'Cache-Control':'no-store'})
+
+    async def up_next(self,request):
+        ident=request.query.get('episode_id');rows=self.project()
+        if not self.public_episode(rows,ident):raise web.HTTPNotFound()
+        try:limit=int(request.query.get('limit','20'))
+        except ValueError:raise web.HTTPBadRequest()
+        if not 1<=limit<=100:raise web.HTTPBadRequest()
+        from playback_features import series_after
+        items=series_after(rows,ident,limit)
+        return web.json_response({'schema_version':1,'episode_id':ident,'items':items,'next_episode':items[0] if items else None,'order':'chronological','autoplay_owner':'client'})
+
+    def queue_file(self,request):
+        return 'series-queue-'+hashlib.sha256(self.paired(request).encode()).hexdigest()+'.json'
+
+    def queue_view(self,record,rows):
+        def present(ident):
+            row=self.public_episode(rows,ident)
+            return {**(row or {'id':ident}),'available':row is not None}
+        ids=record.get('episode_ids',[])
+        return {'schema_version':1,'revision':record.get('revision',0),'autoplay':record.get('autoplay',False),
+                'current':present(ids[0]) if ids else None,'items':[present(i) for i in ids[1:]],'updated_at':record.get('updated_at'),
+                'autoplay_owner':'client'}
+
+    async def series_queue(self,request):
+        name=self.queue_file(request);record=self.read(name,{})
+        rows=self.project()
+        if request.method=='GET':return web.json_response(self.queue_view(record,rows),headers={'Cache-Control':'no-store'})
+        data=await request.json()
+        if not isinstance(data,dict):raise web.HTTPBadRequest()
+        record=self.read(name,{})  # Re-read after awaiting the body: concurrent requests must conflict.
+        if type(data.get('expected_revision')) is not int:raise web.HTTPConflict()
+        if request.method=='DELETE':ids=[];autoplay=False
+        else:
+            ident=data.get('episode_id');current=self.public_episode(rows,ident)
+            if not current:raise web.HTTPNotFound()
+            group=next(p for p in rows if p['id']==current['programme_id'])
+            if group.get('live') or group.get('film'):raise web.HTTPBadRequest(reason='Series episodes only')
+            if not isinstance(data.get('autoplay',False),bool):raise web.HTTPBadRequest()
+            from playback_features import series_after
+            ids=[ident]+[e['id'] for e in series_after(rows,ident,10000)]
+            autoplay=data.get('autoplay',False)
+        if data.get('expected_revision')!=record.get('revision',0):raise web.HTTPConflict(reason='Queue changed; fetch it again')
+        record={'episode_ids':ids,'autoplay':autoplay,'revision':record.get('revision',0)+1,'updated_at':time.time()}
+        self.write(name,record)
+        return web.json_response(self.queue_view(record,rows))
+
+    async def advance_queue(self,request):
+        name=self.queue_file(request);record=self.read(name,{})
+        data=await request.json()
+        if not isinstance(data,dict):raise web.HTTPBadRequest()
+        record=self.read(name,{})
+        if type(data.get('expected_revision')) is not int:raise web.HTTPConflict()
+        ids=record.get('episode_ids',[])
+        if data.get('expected_revision')!=record.get('revision',0) or not ids or data.get('completed_episode_id')!=ids[0]:
+            raise web.HTTPConflict(reason='Queue changed; fetch it again')
+        rows=self.project();remaining=[ident for ident in ids[1:] if self.public_episode(rows,ident)]
+        record.update(episode_ids=remaining,revision=record.get('revision',0)+1,updated_at=time.time())
+        self.write(name,record)
+        return web.json_response({**self.queue_view(record,rows),'removed_unavailable':len(ids)-1-len(remaining)})
 
     async def library(self, request):
         return web.json_response({'programmes': self.project(), 'updated_at':time.time()})
@@ -214,6 +320,17 @@ class Gateway:
             await asyncio.to_thread(self.discovery.warm)
             await asyncio.sleep(21600)
 
+    async def uhd_catalogue_background(self):
+        from bbc_uhd_catalogue import refresh,refresh_discovery
+        while True:
+            try:
+                self.project()
+                await asyncio.to_thread(refresh_discovery,self.root)
+                self.project()
+                await asyncio.to_thread(refresh,self.bridge.catalogue,self.root/'bbc-uhd-catalogue.json')
+            except Exception:pass
+            await asyncio.sleep(900)
+
     async def rating_background(self):
         while True:
             try:
@@ -268,25 +385,28 @@ class Gateway:
         job = secrets.token_urlsafe(24); device = self.paired(request)
         self.jobs[job] = {'state':'preparing', '_device':device, '_created':time.time()}
         self.write('request-status.json', {'state':'preparing','episode':ident,'position':position,'updated_at':time.time()})
-        task = asyncio.create_task(self.worker(job, ident, position, device, native=data.get('native_playback') is True, prefer_direct=data.get('prefer_direct') is not False)); self.tasks.add(task); task.add_done_callback(self.tasks.discard)
+        task = asyncio.create_task(self.worker(job, ident, position, device, native=data.get('native_playback') is True, prefer_direct=data.get('prefer_direct') is not False, channel4_live=data.get('native_channel4_live') is True)); self.tasks.add(task); task.add_done_callback(self.tasks.discard)
         return web.json_response({'job':job}, status=202)
 
-    async def worker(self, job, ident, position, device, native=False, prefer_direct=True):
+    async def worker(self, job, ident, position, device, native=False, prefer_direct=True, channel4_live=False):
         stream = None; ticket = None
         try:
             async with self.preparing:
                 if job not in self.jobs: return
                 if native:
                     from native_playback import descriptor,bbc_direct
-                    choice=descriptor(self.bridge,ident)
+                    choice=descriptor(self.bridge,ident,channel4_live=channel4_live)
                     if choice:
                         episode,route,meta=choice;url=None
+                        self.bind_source_key(meta,episode)
                         from live_playback_metadata import apply_live_metadata
                         apply_live_metadata(meta,getattr(getattr(self.bridge,'watch',None),'groups',[]),ident)
                         if route['provider']=='bbc' and prefer_direct:
-                            try:url=await asyncio.to_thread(bbc_direct,self.bridge,episode)
+                            try:
+                                url=await asyncio.to_thread(bbc_direct,self.bridge,episode)
+                                if getattr(url,'version_id',None):meta['version_id']=url.version_id
                             except Exception:pass  # Resolve/compatibility failure falls back to the relay.
-                        if route['provider'] in ('channel5','u','itv') or url:
+                        if route['provider'] in ('channel5','u','itv','channel4') or url:
                             if job not in self.jobs:return
                             ticket=secrets.token_urlsafe(32)
                             for old,value in list(self.sessions.items()):
@@ -299,6 +419,7 @@ class Gateway:
                 if job not in self.jobs: return
                 ticket = secrets.token_urlsafe(32)
                 meta = prepared['_watch_meta']
+                self.bind_source_key(meta,episode)
                 from live_playback_metadata import apply_live_metadata
                 apply_live_metadata(meta,getattr(getattr(self.bridge,'watch',None),'groups',[]),ident) if meta.get('live') else None
                 video = next((s for s in prepared.get('info',{}).get('streams',[]) if s.get('codec_type') == 'video'), {})
@@ -313,7 +434,7 @@ class Gateway:
                     from tvos_stream import TVStream
                     # Keep the proven timestamp-preserving codec-copy packager. Native AVPlayer
                     # manages stalls; arbitrary VOD jumps reopen at the requested absolute offset.
-                    stream = TVStream(self.root/'streams'/ticket, source,allow_short=not meta.get('live'))
+                    stream = TVStream(self.root/'streams'/ticket, source,allow_short=not meta.get('live'),live=bool(meta.get('live')))
                     await stream.ready()
                     url = self.settings['public_base']+'/stream/'+ticket+'/index.m3u8'
                 else:
@@ -336,7 +457,13 @@ class Gateway:
     async def poll(self, request):
         job = self.jobs.get(request.match_info['job'])
         if not job or job['_device'] != self.paired(request): raise web.HTTPNotFound()
-        return web.json_response({k:v for k,v in job.items() if not k.startswith('_')})
+        result={k:v for k,v in job.items() if not k.startswith('_')}
+        if result.get('state')=='ready' and result.get('metadata'):
+            from urllib.parse import quote
+            meta=dict(result['metadata']);ident=quote(meta['id'],safe='')
+            meta.update(features_url='/playback/features?episode_id='+ident,up_next_url='/playback/up-next?episode_id='+ident)
+            result['metadata']=meta
+        return web.json_response(result)
 
     async def cancel(self, request):
         job = self.jobs.get(request.match_info['job'])
@@ -378,6 +505,8 @@ class Gateway:
             if not re.fullmatch(r'index\.m3u8|segment\d{6}\.ts', name) or stream.closed: raise web.HTTPNotFound()
             path = stream.directory/name
             if not path.is_file(): raise web.HTTPNotFound()
+            if name=='index.m3u8' and not stream.live:
+                return web.Response(text=stream.playlist(),content_type='application/vnd.apple.mpegurl',headers={'Cache-Control':'no-store'})
             return web.FileResponse(path, headers={'Content-Type':'application/vnd.apple.mpegurl' if name.endswith('m3u8') else 'video/mp2t','Cache-Control':'no-store'})
         if value['prepared'].get('native') or name != 'video.mp4': raise web.HTTPNotFound()
         return web.FileResponse(value['prepared']['path'], headers={'Content-Type':'video/mp4'})
@@ -394,7 +523,7 @@ class Gateway:
     async def start(self, app):
         self.background = [asyncio.create_task(self.guide.run()), asyncio.create_task(self.maintenance())]
         if hasattr(self,'discovery'):
-            self.background.extend([asyncio.create_task(self.discovery_background()),asyncio.create_task(self.rating_background()),asyncio.create_task(self.five_live_background()),asyncio.create_task(self.episode_artwork_background()),asyncio.create_task(self.live_description_background()),asyncio.create_task(self.itv_live_background())])
+            self.background.extend([asyncio.create_task(self.discovery_background()),asyncio.create_task(self.uhd_catalogue_background()),asyncio.create_task(self.rating_background()),asyncio.create_task(self.five_live_background()),asyncio.create_task(self.episode_artwork_background()),asyncio.create_task(self.live_description_background()),asyncio.create_task(self.itv_live_background())])
 
     async def stop(self, app):
         for job in list(self.jobs): self.jobs.pop(job, None)
@@ -417,6 +546,13 @@ class Gateway:
         app.router.add_get('/health', lambda r:web.json_response({'ok':True,'version':'1.0'}))
         app.router.add_post('/pair', self.pair)
         app.router.add_get('/library', self.library)
+        app.router.add_get('/playback/capabilities',self.playback_capabilities)
+        app.router.add_get('/playback/features',self.playback_features)
+        app.router.add_get('/playback/up-next',self.up_next)
+        app.router.add_get('/playback/queue',self.series_queue)
+        app.router.add_post('/playback/queue',self.series_queue)
+        app.router.add_delete('/playback/queue',self.series_queue)
+        app.router.add_post('/playback/queue/advance',self.advance_queue)
         app.router.add_post('/favourites',self.favourite)
         app.router.add_get('/search',self.search)
         app.router.add_get('/discover',self.discover)

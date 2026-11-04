@@ -3,7 +3,9 @@ import AVFoundation
 
 @main struct WatchApp: App {
     @StateObject private var library = LibraryStore()
-    init() { try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback); try? AVAudioSession.sharedInstance().setActive(true) }
+    init() {
+        do {try UHDIdentityVault.importStagedSetup();UHDIdentityVault.diagnostic("startup")} catch {UHDIdentityVault.diagnostic("setup-failed",error:error)}
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback); try? AVAudioSession.sharedInstance().setActive(true) }
     var body: some Scene {
         WindowGroup {
             RootView().environmentObject(library).tint(.white).preferredColorScheme(.dark)
@@ -132,7 +134,7 @@ struct RootView:View {
             .environment(\.watchCardWidth,WatchDesign.cardWidth(geometry.size.width))
             .environment(\.watchColumns,WatchDesign.columns(geometry.size.width))
         }.ignoresSafeArea(.container,edges:.horizontal).background(WatchDesign.canvas.ignoresSafeArea())
-        .task { await library.refresh() }
+        .task { try? UHDIdentityVault.importStagedSetup();await library.refresh() }
         .fullScreenCover(item:$library.deepPlay,onDismiss:{ Task { await library.refresh() } }) { PlayerScreen(selection:$0).id($0.id) }
         .onChange(of:scenePhase) { _,phase in if phase == .active { Task { await library.refresh() } } }
     }
@@ -165,63 +167,109 @@ struct PairView:View {
     }
 }
 
+enum SettingsProvider:String,CaseIterable,Identifiable {
+    case bbc,channel4,itv,u,channel5
+    var id:String {rawValue}
+    var title:String {
+        switch self {case .bbc:return "BBC iPlayer";case .channel4:return "Channel 4";case .itv:return "ITVX";case .u:return "U";case .channel5:return "Channel 5"}
+    }
+    var localAccount:Bool {self == .itv || self == .u || self == .channel5}
+}
+
 struct SettingsView:View {
     @EnvironmentObject private var library:LibraryStore
-    @State private var confirm=false
-    private var shows:Int { library.programmes.filter { !$0.live && !$0.film && $0.discoveryRef == nil }.count }
-    private var films:Int { library.programmes.filter { $0.film && $0.discoveryRef == nil }.count }
-    private var channels:Int { library.programmes.filter(\.live).count }
-    private var brands:[Brand] { var seen=Set<String>();return library.programmes.flatMap(\.brands).filter { seen.insert($0.id).inserted }.sorted { $0.name<$1.name } }
+    @AppStorage("watch.autoplayNext") private var autoplayNext=false
+    @State private var connected:Set<SettingsProvider>=[]
+    var body:some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment:.leading,spacing:28) {
+                    Text("Settings").font(.system(size:42,weight:.bold)).padding(.bottom,8)
+                    Text("Accounts").font(WatchDesign.heading)
+                    VStack(spacing:10) {
+                        ForEach(SettingsProvider.allCases) {provider in
+                            NavigationLink {
+                                ProviderSettingsPage(provider:provider)
+                            } label: {
+                                HStack(spacing:24) {
+                                    Artwork(source:brand(provider),fit:true,maxPixel:200).frame(width:88,height:46)
+                                    Text(provider.title).font(.system(size:26,weight:.medium))
+                                    Spacer()
+                                    Text(provider.localAccount ? (connected.contains(provider) ? "Connected" : "Not connected") : "Managed on Pi")
+                                        .font(WatchDesign.detail).opacity(0.65)
+                                    Image(systemName:"chevron.right").font(.system(size:19,weight:.semibold)).opacity(0.5)
+                                }.frame(maxWidth:.infinity,minHeight:56)
+                            }.buttonStyle(WatchActionButtonStyle()).focusEffectDisabled()
+                        }
+                    }
+                    Text("Playback").font(WatchDesign.heading).padding(.top,12)
+                    Toggle(isOn:$autoplayNext) {
+                        VStack(alignment:.leading,spacing:6) {
+                            Text("Autoplay next episode").font(.system(size:26,weight:.medium))
+                            Text("A ten-second countdown lets you cancel.").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
+                        }
+                    }.padding(24).background(.white.opacity(0.055),in:RoundedRectangle(cornerRadius:18))
+                    NavigationLink { HostSettingsPage() } label: {
+                        HStack {Label("Library connection",systemImage:"network");Spacer();Image(systemName:"chevron.right")}.font(WatchDesign.body).frame(maxWidth:.infinity)
+                    }.buttonStyle(WatchActionButtonStyle()).focusEffectDisabled().padding(.top,12)
+                }.frame(maxWidth:1160).padding(.horizontal,WatchDesign.inset).padding(.top,38).padding(.bottom,72).frame(maxWidth:.infinity)
+            }.background(WatchDesign.canvas)
+            .task {
+                var accounts=Set<SettingsProvider>()
+                if (try? await ITVAccountService.shared.isSignedIn()) == true {accounts.insert(.itv)}
+                if (try? await UAccountService.shared.isSignedIn()) == true {accounts.insert(.u)}
+                if (try? await Channel5AccountService.shared.isSignedIn()) == true {accounts.insert(.channel5)}
+                connected=accounts
+            }
+        }
+    }
+    private func brand(_ provider:SettingsProvider)->String? {
+        library.programmes.flatMap(\.brands).first {$0.id==provider.rawValue}?.image
+            ?? "http://192.168.0.146:8109/static/artwork/brands/\(provider.rawValue).png"
+    }
+}
+
+private struct ProviderSettingsPage:View {
+    let provider:SettingsProvider
     var body:some View {
         ScrollView {
-            VStack(alignment:.leading,spacing:36) {
-                SectionHeading(title:"Your home library",subtitle:"Connected to the Pi. Playback stays on this Apple TV.")
-                HStack(alignment:.top,spacing:36) {
-                    VStack(alignment:.leading,spacing:28) {
-                        Text("All together").font(.system(size:27,weight:.semibold))
-                        HStack(spacing:18) {
-                            statistic(shows,"Shows");statistic(films,"Films");statistic(channels,"Live channels")
-                        }
-                        Divider().overlay(.white.opacity(0.12))
-                        Brands(items:brands)
-                        HStack(spacing:10) {
-                            Circle().fill(library.error == nil ? Color.green : .orange).frame(width:9,height:9)
-                            Text(library.error == nil ? "Library connected" : "Waiting for the library").font(WatchDesign.body)
-                        }
-                        if let updated=library.lastUpdated { Text("Updated \(updated,style:.relative) ago").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted) }
-                    }.padding(30).frame(maxWidth:.infinity,alignment:.topLeading).background(.white.opacity(0.045),in:RoundedRectangle(cornerRadius:22))
-                    VStack(alignment:.leading,spacing:25) {
-                        Text("Made for this screen").font(.system(size:27,weight:.semibold))
-                        Label("Native Siri Remote controls",systemImage:"appletvremote.gen4").font(WatchDesign.body)
-                        Label("Continue where you left off",systemImage:"clock.arrow.circlepath").font(WatchDesign.body)
-                        Label("Stream quality shown during playback",systemImage:"4k.tv").font(WatchDesign.body)
-                        Divider().overlay(.white.opacity(0.12))
-                        Image("tmdb").resizable().scaledToFit().frame(width:135,height:35)
-                        Text("This product uses the TMDB API but is not endorsed or certified by TMDB.").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).fixedSize(horizontal:false,vertical:true)
-                    }.padding(30).frame(maxWidth:.infinity,alignment:.topLeading).background(.white.opacity(0.045),in:RoundedRectangle(cornerRadius:22))
+            VStack(alignment:.leading,spacing:28) {
+                switch provider {
+                case .itv:ProviderSignIn(provider:.itv)
+                case .u:ProviderSignIn(provider:.u)
+                case .channel5:Channel5SignIn()
+                case .bbc,.channel4:
+                    VStack(alignment:.leading,spacing:22) {
+                        Text(provider.title).font(.system(size:36,weight:.semibold))
+                        Label("Managed on your Pi",systemImage:"network").font(WatchDesign.body)
+                        Text(provider == .bbc ? "BBC programmes play directly on this Apple TV. UHD is attempted automatically when this device is configured and BBC offers a compatible stream." : "Channel 4 on-demand uses the Pi connection. Live channels play directly on Apple TV. QR sign-in for Watch is not available yet.")
+                            .font(WatchDesign.body).foregroundStyle(WatchDesign.muted).fixedSize(horizontal:false,vertical:true)
+                    }.padding(32).frame(maxWidth:.infinity,alignment:.leading).background(.white.opacity(0.045),in:RoundedRectangle(cornerRadius:22))
                 }
-                SectionHeading(title:"Provider accounts",subtitle:"Scan a code to sign in on the provider’s website. Sessions stay in this Apple TV’s Keychain.")
-                ProviderSignIn(provider:.itv)
-                ProviderSignIn(provider:.u)
-                Channel5SignIn()
-                Text("BBC iPlayer and Channel 4 use the existing Pi connections. These Apple TV sign-ins do not change provider favourites or the Pi’s saved account sessions.")
-                    .font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
-                HStack {
-                    Text("Watch · 1.4").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
-                    Spacer()
-                    Button("Disconnect this Apple TV",role:.destructive) { confirm=true }.font(.system(size:23))
-                        .confirmationDialog("Disconnect this Apple TV?",isPresented:$confirm) {
-                            Button("Disconnect",role:.destructive) { try? PairingStore.save(nil);library.api.token=nil;library.connected=false }
-                            Button("Cancel",role:.cancel) {}
-                        }
-                }.padding(.top,8)
-            }.padding(.horizontal,WatchDesign.inset).padding(.top,38).padding(.bottom,72)
+            }.frame(maxWidth:1080).padding(WatchDesign.inset).frame(maxWidth:.infinity)
         }.background(WatchDesign.canvas)
     }
-    private func statistic(_ count:Int,_ label:String) -> some View {
-        VStack(alignment:.leading,spacing:5) {
-            Text(count.formatted()).font(.system(size:38,weight:.semibold,design:.rounded)).monospacedDigit()
-            Text(label).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
-        }.frame(maxWidth:.infinity,alignment:.leading)
+}
+
+private struct HostSettingsPage:View {
+    @EnvironmentObject private var library:LibraryStore
+    @State private var confirm=false
+    var body:some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:28) {
+                Text("Library connection").font(.system(size:36,weight:.semibold))
+                Label(library.error == nil ? "Connected to your Pi" : "Waiting for your Pi",systemImage:library.error == nil ? "checkmark.circle" : "wifi.exclamationmark").font(WatchDesign.body)
+                Text(library.api.base).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
+                Button("Disconnect this Apple TV",role:.destructive) {confirm=true}
+                    .buttonStyle(WatchActionButtonStyle()).focusEffectDisabled()
+                    .confirmationDialog("Disconnect this Apple TV?",isPresented:$confirm) {
+                        Button("Disconnect",role:.destructive) {try? PairingStore.save(nil);library.api.token=nil;library.connected=false}
+                        Button("Cancel",role:.cancel) {}
+                    }
+                Divider().padding(.vertical,12)
+                Image("tmdb").resizable().scaledToFit().frame(width:120,height:30)
+                Text("This product uses the TMDB API but is not endorsed or certified by TMDB.").font(.system(size:17)).foregroundStyle(WatchDesign.muted)
+            }.frame(maxWidth:1080,alignment:.leading).padding(WatchDesign.inset).frame(maxWidth:.infinity)
+        }.background(WatchDesign.canvas)
     }
 }

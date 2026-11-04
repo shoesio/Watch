@@ -40,7 +40,7 @@ def refresh_five():
         return p
     with ThreadPoolExecutor(max_workers=3) as pool:return list(pool.map(guide,channels))
 
-def descriptor(bridge,ident):
+def descriptor(bridge,ident,channel4_live=False):
     version=getattr(bridge.watch,'index',{}).get(ident)
     if not version:return None
     pairs=version.get('sources',[])
@@ -50,6 +50,8 @@ def descriptor(bridge,ident):
     provider_id=source.get('provider_id')
     if provider_id=='channel5' and re.fullmatch(r'[A-Za-z0-9-]{1,80}',str(source.get('provider_episode_id',''))):
         route={'provider':'channel5','id':source['provider_episode_id'],'live':bool(source.get('live'))}
+    elif channel4_live and provider_id=='channel4' and source.get('live') and source.get('provider_episode_id') in ('C4','E4','M4','F4','4S'):
+        route={'provider':'channel4','id':source['provider_episode_id'],'live':True}
     elif provider_id=='u' and re.fullmatch(r'[0-9]{1,20}',str(source.get('provider_episode_id',''))):
         route={'provider':'u','id':source['provider_episode_id'],'live':False}
     elif provider_id=='itv':
@@ -74,6 +76,13 @@ def bbc_media_url(url):
 def clear_hls(text):
     if not text.startswith('#EXTM3U'):return False
     return not any(line.startswith(('#EXT-X-KEY:','#EXT-X-SESSION-KEY:')) and 'METHOD=NONE' not in line for line in text.splitlines())
+
+class BBCDirectURL(str):
+    def __new__(cls,url,version_id=None):
+        result=super().__new__(cls,url)
+        result.version_id=version_id if re.fullmatch('[a-z0-9]{8}',str(version_id)) else None
+        return result
+
 
 def bbc_direct(bridge,source):
     """Resolve only clear BBC HLS; native AVPlayer downloads all media itself.
@@ -102,7 +111,7 @@ def bbc_direct(bridge,source):
         # HLSStream normally already identifies a media playlist, not a master.
         # Keep unexpected master/codec selection on the established relay route.
         if '#EXT-X-STREAM-INF:' in r.text or '#EXTINF:' not in r.text:return None
-        return url
+        return BBCDirectURL(url,getattr(stream,'_watch_version_id',None))
     finally:
         if session is not None:
             close=getattr(getattr(session,'http',None),'close',None)

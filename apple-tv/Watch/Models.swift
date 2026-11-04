@@ -13,6 +13,7 @@ struct Programme: Decodable, Identifiable {
     let showLogo: String?
     let channelLogo: String?
     let live: Bool
+    let uhdAvailable:Bool?
     let film: Bool
     let filmRank:Int?
     let recent: Bool
@@ -43,13 +44,14 @@ struct Episode: Decodable, Identifiable {
     let updatedAt: Double?
     let progress: Double?
     let quality: String?
+    let uhdAvailable:Bool?
     let brands: [Brand]
     var seasonTitle: String {
         guard let season, !season.isEmpty else { return "Episodes" }
         return Int(season) != nil ? "Series \(season)" : season
     }
     var caption: String {
-        [episodeNumber.map { "Episode \($0)" }, durationSeconds.flatMap { $0 > 0 ? "\(Int($0 / 60)) min" : nil }, quality].compactMap { $0 }.joined(separator: " · ")
+        [episodeNumber.map { "Episode \($0)" }, durationSeconds.flatMap { $0 > 0 ? "\(Int($0 / 60)) min" : nil }, uhdAvailable == true ? "UHD" : quality].compactMap { $0 }.joined(separator: " · ")
     }
 }
 struct PlaybackMetadata: Decodable {
@@ -67,6 +69,8 @@ struct PlaybackMetadata: Decodable {
     let streamHeight: Double?
     let artwork:String?
     let channelLogo:String?
+    let sourceKey:String?
+    var versionId:String?
 }
 struct Prepared: Decodable {
     let state: String
@@ -80,6 +84,7 @@ struct Prepared: Decodable {
 }
 struct PairResponse: Decodable { let token: String }
 struct APIError: Decodable { let error: String }
+struct WatchHTTPError:LocalizedError {let status:Int;let message:String;var errorDescription:String? {message}}
 struct WatchError: LocalizedError { let message: String; var errorDescription: String? { message } }
 
 extension JSONDecoder {
@@ -103,7 +108,7 @@ extension Episode {
         return "\(max(1,Int(ceil((duration-resume)/60)))) min remaining"
     }
     var compactCaption:String {
-        [episodeNumber.map { "Episode \($0)" },durationText,quality].compactMap { $0 }.joined(separator:" · ")
+        [episodeNumber.map { "Episode \($0)" },durationText,uhdAvailable == true ? "UHD" : quality].compactMap { $0 }.joined(separator:" · ")
     }
 }
 extension Programme {

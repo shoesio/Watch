@@ -1,0 +1,69 @@
+{
+  "date": "2026-11-04",
+  "build": 15,
+  "signed_build": "passed",
+  "physical_install": "passed",
+  "client": "Apple TV",
+  "transport": "shared Watch controls; direct AVPlayer/FairPlay playback preserved",
+  "model_checks": "passed (Tests/run-playback-extras.sh)",
+  "physical": {
+    "channel4_play_next": "viewer confirmed",
+    "bbc_play_next_focus": "viewer confirmed fixed in build 15",
+    "server_series_queue": "observed chronological successor and autoplay false; final episode no successor"
+  },
+  "still_unverified": [
+    "physical chapter/intro seek on an episode with verified markers",
+    "full natural-completion autoplay/countdown and cancellation on device"
+  ],
+  "marker_limit": "BBC exact version unavailable in sampled playback response; skip controls correctly withheld",
+  "autoplay_default": false,
+  "credits_build16": {
+    "signed_build": "passed",
+    "physical_install": "passed",
+    "model_checks": "passed including credits interval, no-title-guess, pause/buffer/final guards and dismissal/reset",
+    "metadata": "explicit credits/end_credits chapter kind only, source and BBC version matched",
+    "autoplay": "unchanged: only after natural completion",
+    "physical_marker_test": "not yet verified: no real credits-marked episode available for the check"
+  },
+  "bbc_version_handover": {
+    "build": 17,
+    "signed_build": "passed",
+    "physical_install": "passed",
+    "gateway_tests": "44 checks passed, plus final 17 native checks",
+    "source_probe": "Doctor Who The Vanquishers, episode m00129lb, actual mediaselector VPID m00129l9",
+    "verified_markers": {
+      "recap": [
+        1,
+        29
+      ],
+      "intro": [
+        274,
+        306
+      ]
+    },
+    "device_playback": "native-bbc 1280x720, position 289 seconds observed, no reported stalls/retries",
+    "viewer_skip_test": "pending response",
+    "marker_coverage": "Four sampled Doctor Who episodes have two skip interactions each; four Have I Got News for You episodes have none"
+  },
+  "clear_logos_build18": {
+    "signed_build": "passed",
+    "physical_install": "passed",
+    "geometry_checks": "passed: upright, compact, wide and very wide; no aspect distortion; width/height bounds",
+    "contexts": [
+      "transport",
+      "show/film/home heroes",
+      "discovery and playback warmup"
+    ],
+    "alignment": "horizontal centre and common bottom baseline; transport permits upward overflow",
+    "physical_visual_review": "pending: device screenshot control timed out"
+  },
+  "clear_logos_build19": {
+    "signed_build": "passed",
+    "physical_install": "passed",
+    "hero": "bottom-left aligned; shows max height 200, films 180; shared 440-point hero retained",
+    "transport": "bottom-centred, upward overflow max 200 (previously 150)",
+    "warmup": "bottom-centred, max height 250",
+    "physical_review": "Doctor Who home hero screenshot 2026-11-04 19:51:41: larger, aligned with text/actions, no overlap",
+    "transport_visual_review": "not separately captured in this pass"
+  }
+}

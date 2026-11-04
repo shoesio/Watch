@@ -34,12 +34,65 @@ class NativeRoutes(unittest.TestCase):
    watch=SimpleNamespace(index={'ep':{'sources':[(source,'U' if service=='u' else 'ITVX')]}},quality=SimpleNamespace(rank=lambda p:1),groups=[{'title':'Show','episodes':[{'id':'ep'}]}],brands=lambda n:[])
    _,route,_=descriptor(SimpleNamespace(watch=watch),'ep')
    self.assertEqual(route['provider'],service);self.assertNotIn('token',route);self.assertNotIn('session',route)
+ def test_channel4_live_requires_client_capability_and_never_routes_vod(self):
+  for live,ident in [(True,'C4'),(False,'80485-008'),(True,'invalid')]:
+   source={'id':'ep','title':'Four','provider_id':'channel4','provider_episode_id':ident,'live':live}
+   watch=SimpleNamespace(index={'ep':{'sources':[(source,'Channel 4')]}},quality=SimpleNamespace(rank=lambda p:1),groups=[{'title':'Four','episodes':[{'id':'ep'}]}],brands=lambda n:[])
+   bridge=SimpleNamespace(watch=watch)
+   self.assertIsNone(descriptor(bridge,'ep'))
+   result=descriptor(bridge,'ep',channel4_live=True)
+   if live and ident=='C4':self.assertEqual(result[1],{'provider':'channel4','id':'C4','live':True})
+   else:self.assertIsNone(result)
  def test_five_descriptor_contains_no_account_session(self):
   ep={'id':'ep','title':'Example','provider_id':'channel5','provider_episode_id':'123-456','live':False}
   meta={'id':'ep','title':'Example','duration_seconds':600}
   watch=SimpleNamespace(index={'ep':{'sources':[(ep,'Channel 5')]}},quality=SimpleNamespace(rank=lambda p:1),groups=[{'title':'Show','episodes':[meta]}],brands=lambda n:[])
   source,route,result=descriptor(SimpleNamespace(watch=watch),'ep')
   self.assertEqual(route,{'provider':'channel5','id':'123-456','live':False});self.assertEqual(result['start_position'],0)
+
+class BBCVersionBinding(unittest.TestCase):
+ def test_actual_mediaselector_version_follows_each_stream(self):
+  from quality_policy import bbc_streams_with_versions
+  class Plugin:
+   def mediaselector(self,pid):yield pid,SimpleNamespace()
+   def streams(self,**kwargs):return dict([*self.mediaselector('b1234567'),*self.mediaselector('b7654321')])
+  plugin=Plugin();original=plugin.mediaselector
+  streams=bbc_streams_with_versions(plugin)
+  self.assertEqual(streams['b1234567']._watch_version_id,'b1234567')
+  self.assertEqual(streams['b7654321']._watch_version_id,'b7654321')
+  self.assertEqual(plugin.mediaselector,original)
+ def test_immutable_stream_values_do_not_break_resolution(self):
+  from quality_policy import bbc_streams_with_versions
+  class Plugin:
+   def mediaselector(self,pid):yield 'alias','unchanged'
+   def streams(self,**kwargs):return dict(self.mediaselector('b1234567'))
+  self.assertEqual(bbc_streams_with_versions(Plugin()),{'alias':'unchanged'})
+ def test_invalid_versions_and_url_string_compatibility(self):
+  from native_playback import BBCDirectURL
+  value=BBCDirectURL('https://a.bbci.co.uk/test.m3u8','b1234567')
+  self.assertEqual(str(value),'https://a.bbci.co.uk/test.m3u8');self.assertEqual(value.version_id,'b1234567')
+  self.assertIsNone(BBCDirectURL('https://a.bbci.co.uk/test.m3u8','bad/id').version_id)
+
+class BBCPublicMetadata(unittest.TestCase):
+ def test_current_replacement_used_without_account_login(self):
+  from quality_policy import bbc_public_streams
+  from unittest.mock import Mock
+  row={'episodes':[{'id':'m0032vwc','versions':[{'id':'m00343ws','kind':'technical-replacement','uhd':True},{'id':'p0plby39','kind':'audio-described'},{'id':'m0033tcl','kind':'signed'}]}]}
+  response=Mock();response.json.return_value=row
+  plugin=Mock();plugin.session.http.get.return_value=response;stream=SimpleNamespace();plugin.mediaselector.return_value=[('720p50',stream)]
+  result=bbc_public_streams(plugin,{'url':'https://www.bbc.co.uk/iplayer/episode/m0032vwc'})
+  self.assertEqual(result['720p50']._watch_version_id,'m00343ws');plugin.mediaselector.assert_called_once_with('m00343ws');plugin.login.assert_not_called();plugin.streams.assert_not_called()
+ def test_expired_future_and_accessibility_versions_not_selected(self):
+  from quality_policy import bbc_public_streams
+  from unittest.mock import Mock
+  versions=[{'id':'b1234567','availability':{'end':'2000-01-01T00:00:00Z'}},{'id':'b2345678','availability':{'start':'2099-01-01T00:00:00Z'}},{'id':'b3456789','kind':'signed'},{'id':'b4567890','kind':'audio-described'}]
+  response=Mock();response.json.return_value={'episodes':[{'id':'m0032vwc','versions':versions}]};plugin=Mock();plugin.session.http.get.return_value=response
+  self.assertEqual(bbc_public_streams(plugin,{'url':'https://www.bbc.co.uk/iplayer/episode/m0032vwc'}),{});plugin.mediaselector.assert_not_called()
+ def test_non_bbc_or_live_keeps_existing_route(self):
+  from quality_policy import bbc_public_streams
+  from unittest.mock import Mock
+  for episode in [{'url':'https://evil.test/iplayer/episode/m0032vwc'},{'url':'https://www.bbc.co.uk/iplayer/live/bbcone','live':True}]:
+   plugin=Mock();self.assertIsNone(bbc_public_streams(plugin,episode));plugin.session.http.get.assert_not_called()
 
 class NativeGateway(unittest.IsolatedAsyncioTestCase):
  asyncSetUp=test_server.Tests.asyncSetUp
@@ -64,12 +117,32 @@ class NativeGateway(unittest.IsolatedAsyncioTestCase):
    await self.gateway.worker('native','ep',0,'device',native=True)
   result=self.gateway.jobs['native'];self.assertEqual(result['state'],'ready');self.assertEqual(result['native'],route)
   self.assertIsNone(result['url']);self.assertIsNone(self.gateway.sessions[result['ticket']]['stream'])
+ async def test_episode_playlist_response_explicitly_starts_at_requested_origin(self):
+  from pathlib import Path
+  from tvos_stream import TVStream
+  stream=TVStream.__new__(TVStream);stream.live=False;stream.closed=False;stream.directory=Path(self.temp.name)/'episode';stream.directory.mkdir()
+  (stream.directory/'index.m3u8').write_text('#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXTINF:4,\nsegment000000.ts\n')
+  self.gateway.sessions['episode-test']={'device':'d','prepared':{},'stream':stream,'seen':time.time()}
+  response=await self.client.get('/stream/episode-test/index.m3u8')
+  self.assertEqual(response.status,200);self.assertIn('#EXT-X-START:TIME-OFFSET=0,PRECISE=YES',await response.text())
+  self.assertEqual(response.headers['Cache-Control'],'no-store')
+  self.gateway.sessions.pop('episode-test')
+
+ async def test_native_four_does_not_open_the_pi_relay(self):
+  route={'provider':'channel4','id':'C4','live':True};meta={'id':'ep','title':'Four','live':True,'start_position':0}
+  self.gateway.jobs['native']={'state':'preparing','_device':'device','_created':time.time()}
+  with patch('native_playback.descriptor',return_value=({},route,meta)) as route_call:
+   await self.gateway.worker('native','ep',0,'device',native=True,channel4_live=True)
+   route_call.assert_called_once_with(self.gateway.bridge,'ep',channel4_live=True)
+  result=self.gateway.jobs['native'];self.assertEqual(result['native'],route)
+  self.assertIsNone(self.gateway.sessions[result['ticket']]['stream'])
+
  async def test_native_bbc_resume_is_absolute_no_relay(self):
   route={'provider':'bbc','id':'bbc_ep','live':False};meta={'id':'ep','title':'Show','live':False,'start_position':0}
   self.gateway.jobs['native']={'state':'preparing','_device':'device','_created':time.time()}
-  with patch('native_playback.descriptor',return_value=({},route,meta)),patch('native_playback.bbc_direct',return_value='https://a.bbci.co.uk/test.m3u8'):
+  with patch('native_playback.descriptor',return_value=({},route,meta)),patch('native_playback.bbc_direct',return_value=__import__('native_playback').BBCDirectURL('https://a.bbci.co.uk/test.m3u8','b1234567')):
    await self.gateway.worker('native','ep',180,'device',native=True)
-  result=self.gateway.jobs['native'];self.assertEqual(result['initial_seek'],180);self.assertEqual(result['metadata']['start_position'],0)
+  result=self.gateway.jobs['native'];self.assertEqual(result['metadata']['version_id'],'b1234567');self.assertEqual(result['initial_seek'],180);self.assertEqual(result['metadata']['start_position'],0)
   self.assertIsNone(self.gateway.sessions[result['ticket']]['stream'])
  async def test_unsupported_bbc_returns_to_existing_route(self):
   route={'provider':'bbc','id':'bbc_ep','live':False};meta={'id':'ep','title':'Show','live':False,'start_position':0}
