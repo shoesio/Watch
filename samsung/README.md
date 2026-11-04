@@ -1,3 +1,9 @@
+### Pause position fix — 0.333
+
+On-demand playback now resumes by reopening the stream at the exact saved pause position, rather than using the legacy player's drifting Resume connection. Clock, buffering and terminal callbacks during pause cannot move the saved position or restart playback. Resuming keeps the player visible with the buffering spinner. Live TV retains its native resume behaviour; this does not add live timeshifting.
+
+Validation: `node test-pause.cjs` covers clock drift during pause, late callbacks, repeated pause, remote and on-screen resume, and the first position after reopening.
+
 ## Subtle volume indicator 0.332
 
 ![Watch running on a Samsung television](screenshots/watch-on-samsung.jpg)

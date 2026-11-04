@@ -1,3 +1,9 @@
+### Pause position fix — 0.333
+
+On-demand playback now resumes by reopening the stream at the exact saved pause position, rather than using the legacy player's drifting Resume connection. Clock, buffering and terminal callbacks during pause cannot move the saved position or restart playback. Resuming keeps the player visible with the buffering spinner. Live TV retains its native resume behaviour; this does not add live timeshifting.
+
+Validation: `node test-pause.cjs` covers clock drift during pause, late callbacks, repeated pause, remote and on-screen resume, and the first position after reopening.
+
 ## Subtle volume indicator 0.332
 
 The right-side volume capsule is reduced from 64×280 to 32×160 source-layout pixels. It uses a 4px rail, a smaller speaker/mute mark, no visible numerals or border, and a lighter translucent background. Volume changes still operate the real TV audio; the accessible label retains the level/mute state. It hides after 1.2 seconds with a 0.2-second fade, including delayed visibility hiding so the fade-out is rendered. Reduced-motion disables the transitions.

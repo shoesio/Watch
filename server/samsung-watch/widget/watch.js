@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.332', seekTransition = false;
+ var buildVersion = '0.333', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -353,7 +353,18 @@ var Watch = (function () {
   paintTransport(); overlay(paused ? 'Paused · Choose a position' : 'Choose a position');
  }
  function togglePause(wantPause) {
-  try { if (wantPause) { player.Pause(); paused = true; } else { player.Resume(); paused = false; } paintTransport(); overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); } catch (ignore) {}
+  if (wantPause === paused) { return; }
+  // Orsay can advance a progressive stream's clock while its picture is paused.
+  // Keep the last displayed position and reopen VOD there instead of Resume().
+  if (!wantPause && !livePlayback) { seek(0); return; }
+  try {
+   if (wantPause) {
+    player.Pause(); paused = true;
+    clearTimeout(bufferTimer); bufferTimer = null; clearTimeout(readyTimer); readyTimer = null;
+    stableSince = 0; waiting = false;
+   } else { player.Resume(); paused = false; }
+   paintTransport(); overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3);
+  } catch (ignore) {}
  }
  function seek(delta) {
   if (livePlayback) { overlay('Seeking is available for episodes. This is live TV.', 3); return; }
@@ -364,7 +375,7 @@ var Watch = (function () {
   stop(false, function () { if (generation === expected) { start(item, target, true); } }, true);
  }
  function timeUpdate(milliseconds) {
-  if (!playing) { return; }
+  if (!playing || paused) { return; }
   var value = Number(milliseconds) / 1000;
   if (!isFinite(value) || value < 0) { return; }
   if (nativeOrigin === null) { nativeOrigin = value < 3 ? 0 : value; }
@@ -385,12 +396,12 @@ var Watch = (function () {
   retryTimer = setTimeout(function () { retryTimer = null; busy = false; start(item, target, true); }, [0,2000,5000,10000][Math.min(retryCount,3)]);
  }
  function recover() {
-  if (!playing || retryTimer) { return; }
+  if (!playing || paused || retryTimer) { return; }
   var item = {id: currentEpisode, title: currentTitle}, target = livePlayback ? 0 : Math.max(0, position - 3), expected = generation + 1;
   stop(false, function () { if (generation === expected) { retryAgain(item, target); } }, true);
  }
  function buffering() {
-  if (!playing) { return; }
+  if (!playing || paused) { return; }
   stableSince = 0; waiting = true; overlay('Buffering… keeping your place'); clearTimeout(bufferTimer);
   bufferTimer = setTimeout(function () { bufferTimer = null; recover(); }, 45000);
  }
@@ -510,9 +521,9 @@ var Watch = (function () {
  return {init: init, key: key, shutdown: shutdown,
   streamReady: function () { try { player.SetDisplayArea(0, 0, 960, 540); } catch (ignore) {} },
   buffering: buffering,
-  buffered: function () { if (!playing) { return; } setPreload(''); waiting = false; clearTimeout(bufferTimer); bufferTimer = null; if (!seekTransition) { clearTimeout(readyTimer); } overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); },
+  buffered: function () { if (!playing || paused) { return; } setPreload(''); waiting = false; clearTimeout(bufferTimer); bufferTimer = null; if (!seekTransition) { clearTimeout(readyTimer); } overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); },
   tick: timeUpdate,
-  ended: function () { trace('ended'); if (!playing || seekTransition) { return; } if (livePlayback || !duration || position < duration - 5) { recover(); } else { finished = !!duration; stop(true); } },
+  ended: function () { trace('ended'); if (!playing || paused || seekTransition) { return; } if (livePlayback || !duration || position < duration - 5) { recover(); } else { finished = !!duration; stop(true); } },
   failed: recover
  };
 }());
