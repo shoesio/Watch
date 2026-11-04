@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.333', seekTransition = false;
+ var buildVersion = '0.335', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -13,6 +13,7 @@ var Watch = (function () {
  var busy = false, playing = false, paused = false, ticket = null, job = null;
  var generation = 0, pending = [], poll = null, hide = null, readyTimer = null, heartbeat = null, previousTab = 0, pageSize = 4, guideRefresh = null;
  var currentEpisode = null, currentTitle = "", position = 0, duration = 0, sourceOffset = 0, nativeOrigin = null, livePlayback = false, controlFocus = 1, finished = false;
+ var pauseOnReady = false;
  var timelineMode = false, seekPreview = 0, seekRepeats = 0, lastSeekPress = 0;
  var waiting = false, frozenFrame = false, recoveringView = false, retryFailed = false, recoveryItem = null, recoveryTarget = 0;
  var retryCount = 0, retryTimer = null, bufferTimer = null, stableSince = 0;
@@ -40,7 +41,7 @@ var Watch = (function () {
    return;
   }
   var x = new XMLHttpRequest(), ended = false, timer;
-  function finish(error, value) { if (ended) { return; } ended = true; clearTimeout(timer); done(error, value); }
+  function finish(error, value) { if (ended) { return; } ended = true; clearTimeout(timer); done(error, value, x.status); }
   pending.push(x);
   if (pending.length > 24) { pending.shift(); }
   x.open(method, WATCH_CONNECTION.base + path, true);
@@ -237,10 +238,12 @@ var Watch = (function () {
  }
  function release(done) {
   var releasing = ticket; ticket = null;
-  if (releasing) { request('DELETE', '/api/play/' + encodeURIComponent(releasing), {position: position, completed: finished}, function () { if (done) { done(); } }); }
+  if (releasing) { request('DELETE', '/api/play/' + encodeURIComponent(releasing), {position: position, completed: finished}, function (error) { if (done) { done(error); } }); }
   else if (done) { done(); }
  }
- function stop(showLibrary, done, keepOverlay) {
+ function stop(showLibrary, done, keepOverlay, completing) {
+  if (!completing && typeof WatchExtras !== 'undefined') { WatchExtras.cancel(); }
+  if (!keepOverlay) { pauseOnReady = false; }
   trace(keepOverlay ? 'hold-player' : (showLibrary ? 'close-player' : 'stop-source'));
   if (showLibrary) { seekTransition = false; playerView(false); }
   clearTimeout(retryTimer); retryTimer = null; clearTimeout(bufferTimer); bufferTimer = null;
@@ -260,7 +263,9 @@ var Watch = (function () {
   release(done);
  }
  function begin(data) {
-  ticket = data.ticket; job = null; trace('begin');
+  ticket = data.ticket; job = null;
+  if (typeof WatchExtras !== 'undefined') { WatchExtras.begin(data); }
+  trace('begin');
   currentEpisode = data.episode_id || currentEpisode; currentTitle = data.title; sourceOffset = Number(data.start_position || 0); position = sourceOffset; duration = Number(data.duration_seconds || 0); nativeOrigin = null; stableSince = 0; livePlayback = !!data.live; controlFocus = 1; timelineMode = false; finished = false; paintTransport();
   if (!player || typeof player.Play !== 'function') { stop(false); message('The Samsung native player is unavailable in this browser. Open the installed Smart Hub app.'); return; }
   if (frozenFrame) { try { player.Stop(); } catch (ignore) {} frozenFrame = false; }
@@ -366,10 +371,11 @@ var Watch = (function () {
    paintTransport(); overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3);
   } catch (ignore) {}
  }
- function seek(delta) {
+ function seek(delta, keepPaused, exact) {
   if (livePlayback) { overlay('Seeking is available for episodes. This is live TV.', 3); return; }
-  var target = Math.max(0, Math.min(duration ? Math.max(0, duration - 2) : 86400, position + delta));
+  var target = Math.max(0, Math.min(duration ? Math.max(0, duration - (exact ? 0 : 2)) : 86400, position + delta));
   var item = {id: currentEpisode, title: currentTitle};
+  pauseOnReady = keepPaused === true;
   seekTransition = true; playerView(true); trace('seek');
   var expected = generation + 1; retryCount = 0; retryFailed = false; recoveryItem = item; recoveryTarget = target;
   stop(false, function () { if (generation === expected) { start(item, target, true); } }, true);
@@ -384,7 +390,10 @@ var Watch = (function () {
   position = Math.max(position, sourceOffset + value - nativeOrigin);
   if (position > previousPosition + 0.1) { seekTransition = false; if (waiting || el('preloadPhoto').style.display !== 'none') { setPreload(''); waiting = false; clearTimeout(bufferTimer); bufferTimer = null; overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); } }
   if (duration) { position = Math.min(duration, position); }
-  paintTransport(); if (!seekTransition) { clearTimeout(readyTimer); }
+  paintTransport();
+  if (pauseOnReady) { pauseOnReady = false; togglePause(true); }
+  if (typeof WatchExtras !== 'undefined') { WatchExtras.tick(); }
+  if (!seekTransition) { clearTimeout(readyTimer); }
   if (!paused && !bufferTimer) { if (!stableSince) { stableSince = new Date().getTime(); } else if (new Date().getTime() - stableSince > 30000) { retryCount = 0; } }
  }
  function retryAgain(item, target) {
@@ -439,6 +448,10 @@ var Watch = (function () {
   if (el('genreMenu').style.display === 'block') { if (is('KEY_UP', 38)) { genreFocus = Math.max(0, genreFocus - 1); paintGenres(); } else if (is('KEY_DOWN', 40)) { genreFocus = Math.min(genreChoices.length - 1, genreFocus + 1); paintGenres(); } else if (is('KEY_ENTER', 13)) { genre = genreFocus ? genreChoices[genreFocus] : ''; browseSnapshot = ''; group = null; if (tab === 2) { tab = 1; } area = 'grid'; el('genreMenu').style.display = 'none'; loadPage(0); } else if (is('KEY_RETURN', 10009) || k === 8 || k === 27) { el('genreMenu').style.display = 'none'; } return false; }
   if (el('credits').style.display === 'block') { if (is('KEY_ENTER', 13) || is('KEY_RETURN', 10009) || k === 8 || k === 27) { el('credits').style.display = 'none'; } return false; }
   if (is('KEY_INFO', 457) && !playing && !busy) { el('credits').style.display = 'block'; return false; }
+  if (typeof WatchExtras !== 'undefined') {
+   var extraKey = (is('KEY_RETURN',10009) || k===8 || k===27) ? 'back' : is('KEY_UP',38) ? 'up' : is('KEY_DOWN',40) ? 'down' : is('KEY_LEFT',37) ? 'left' : is('KEY_RIGHT',39) ? 'right' : is('KEY_ENTER',13) ? 'ok' : is('KEY_PLAY',415) ? 'play' : is('KEY_STOP',413) ? 'stop' : '';
+   if (extraKey && WatchExtras.key(extraKey)) { return false; }
+  }
   if (is('KEY_RETURN', 10009) || k === 8 || k === 27) { back(); return false; }
   if (recoveringView && !playing) { if (retryFailed && (is('KEY_ENTER', 13) || is('KEY_PLAY', 415))) { retryCount = 0; retryFailed = false; retryAgain(recoveryItem, recoveryTarget); } return false; }
   if (playing) {
@@ -503,6 +516,15 @@ var Watch = (function () {
   text('appVersion', 'Watch ' + buildVersion);
   if (typeof Common !== 'undefined') { api = new Common.API.Widget(); keys = new Common.API.TVKeyValue(); }
   player = el('player');
+  if (typeof WatchExtras !== 'undefined') { WatchExtras.init({request:request,image:image,clock:clock,
+   state:function () { return {position:position,paused:paused,waiting:waiting,timeline:timelineMode}; },
+   seek:function (target) { seek(target-position,paused,true); },
+   reveal:function () { overlay('',0); },
+   close:function () { stop(true); },
+   play:function (item) { var expected=generation+1;stop(false,function (error) { if (generation!==expected) { return; } if (error) { stop(true); return; } start(item,0); },true); },
+   finish:function (done) { var expected=generation+1;finished=true;stop(false,function (error) { if (generation!==expected) { return; } waiting=false;overlay('',0);done(error); },true,true); }
+  }); }
+
   player.OnBufferingStart = 'Watch.buffering'; player.OnBufferingComplete = 'Watch.buffered';
   player.OnCurrentPlayTime = 'Watch.tick'; player.OnRenderingComplete = 'Watch.ended';
   player.OnConnectionFailed = 'Watch.failed'; player.OnRenderError = 'Watch.failed';
@@ -521,9 +543,9 @@ var Watch = (function () {
  return {init: init, key: key, shutdown: shutdown,
   streamReady: function () { try { player.SetDisplayArea(0, 0, 960, 540); } catch (ignore) {} },
   buffering: buffering,
-  buffered: function () { if (!playing || paused) { return; } setPreload(''); waiting = false; clearTimeout(bufferTimer); bufferTimer = null; if (!seekTransition) { clearTimeout(readyTimer); } overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); },
+  buffered: function () { if (!playing || paused) { return; } if (pauseOnReady) { pauseOnReady=false;togglePause(true);return; } setPreload(''); waiting = false; clearTimeout(bufferTimer); bufferTimer = null; if (!seekTransition) { clearTimeout(readyTimer); } overlay(paused ? 'Paused' : 'Playing', paused ? 0 : 3); },
   tick: timeUpdate,
-  ended: function () { trace('ended'); if (!playing || paused || seekTransition) { return; } if (livePlayback || !duration || position < duration - 5) { recover(); } else { finished = !!duration; stop(true); } },
+  ended: function () { trace('ended'); if (!playing || paused || seekTransition) { return; } if (livePlayback || waiting || !duration || position < duration - 1) { recover(); } else { if (typeof WatchExtras !== 'undefined' && WatchExtras.complete()) { return; } finished = !!duration; stop(true); } },
   failed: recover
  };
 }());

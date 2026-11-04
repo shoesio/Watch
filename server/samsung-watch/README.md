@@ -1,3 +1,13 @@
+### Playback extras — 0.335
+
+Samsung-only chapters, verified Skip intro/recap, an Up next card and optional autoplay, using authenticated `/api/playback/*` routes on the existing Samsung gateway. No Apple TV token, auth or playback route is reused. The normalization module is a self-contained copy of the shared `server/watch-appletv/playback_features.py` contract implementation; the adapter binds timings to this TV's active ticket and selected original source, and uses its own private `samsung-series-queue.json`. Reviewed exact-source sidecars remain read-only in the shared private `appletv/playback-markers.json` location.
+
+Remote: press Down from the transport to reach Chapters, a currently available Skip button, Play next and Autoplay. Left/Right chooses an action, OK activates, Up returns to the transport. The chapter menu uses Up/Down and OK; Return dismisses it. Skip and chapter seeking preserve paused/playing state and use absolute episode seconds through the existing relay restart path. On actual episode completion, progress is saved before the revisioned queue advances. Autoplay is off by default; when enabled it offers a ten-second countdown. Return or Cancel autoplay cancels it. Reduced-motion mode leaves continuation as an explicit Play next action. Nothing prepares or downloads a successor during current playback.
+
+Markers are optional: stale, invalid, mismatched-source/version and unknown-version BBC timings are hidden. The existing Samsung Streamlink resolver does not currently report an exact BBC version ID, so BBC skip controls remain hidden unless an actual resolver version is supplied. No first-version/title-based guesses are made. Films, live channels, unnumbered specials, unavailable successors and final episodes do not infer continuation.
+
+Validation: 154 backend checks; nine widget checks including offset-aware skip/chapter seeks, paused skip/resume, missing/wrong/late metadata, unknown BBC version, no early preparation, completion-before-advance, duplicate completion, final/unavailable episodes, queue conflicts, countdown cancellation and reduced motion. Physical Samsung checks remain pending for layout, chapter/skip operation on content with real verified markers, paused seeks, and an end-to-next episode transition. Synchronise the 0.335 package from 192.168.0.146 and reopen Watch. Pairing, SamsungWatch identity, 1080p drawing mode and native autostart profiles are preserved.
+
 ### Pause position fix — 0.333
 
 On-demand playback now resumes by reopening the stream at the exact saved pause position, rather than using the legacy player's drifting Resume connection. Clock, buffering and terminal callbacks during pause cannot move the saved position or restart playback. Resuming keeps the player visible with the buffering spinner. Live TV retains its native resume behaviour; this does not add live timeshifting.
@@ -5,6 +15,11 @@ On-demand playback now resumes by reopening the stream at the exact saved pause 
 Validation: `node test-pause.cjs` covers clock drift during pause, late callbacks, repeated pause, remote and on-screen resume, and the first position after reopening.
 
 ## Subtle volume indicator 0.332
+
+![Watch running on a Samsung television](screenshots/watch-on-samsung.jpg)
+
+The app running on physical Samsung hardware.
+
 
 The right-side volume capsule is reduced from 64×280 to 32×160 source-layout pixels. It uses a 4px rail, a smaller speaker/mute mark, no visible numerals or border, and a lighter translucent background. Volume changes still operate the real TV audio; the accessible label retains the level/mute state. It hides after 1.2 seconds with a 0.2-second fade, including delayed visibility hiding so the fade-out is rendered. Reduced-motion disables the transitions.
 
@@ -48,7 +63,7 @@ Four-card screens use 124px-high artwork (previously 100px) in 240px cards; libr
 
 All four widget checks and the computed layout/badge checks pass. The installer at 192.168.0.146 offers 0.328. Packaging used 0.327 as its base and preserved every other asset, paired connection and app identity; startup profiles and running services were not changed. Synchronise and reopen Watch for the TV visual check.
 
-For the confirmed native startup method, see the [Auto Ticker setup and recovery guide](../../samsung/AUTOSTART.md).
+For the confirmed native startup method, see the [Auto Ticker setup and recovery guide](AUTOSTART.md).
 
 ## Playback polish 0.327
 

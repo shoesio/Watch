@@ -113,3 +113,26 @@ html,body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 #volumeSymbol{position:absolute;right:0;top:0;font-family:Arial,sans-serif;font-size:15px;line-height:16px;color:#ddd}
 #volumeHUD.muted #volumeFill{height:0!important}
 @media (prefers-reduced-motion:reduce){#volumeHUD,#volumeFill{-webkit-transition:none;transition:none}}
+
+/* Playback extras share the transport's quiet typography and remote focus. */
+#featureActions{position:absolute;right:0;bottom:28px;white-space:nowrap;font-size:17px}
+#featureActions span{display:inline-block;margin-left:10px;padding:9px 15px;border-radius:18px;background:rgba(24,26,31,.78);color:#eee}
+#featureActions span.selected{background:#fff;color:#101217}
+#upNextCard{position:absolute;right:60px;bottom:245px;width:440px;height:132px;background:rgba(15,18,23,.92);border-radius:12px;overflow:hidden}
+#upNextImage{position:absolute;left:0;top:14px;width:184px;height:104px}
+#upNextCopy{position:absolute;left:200px;right:14px;top:14px}
+#upNextHeading{font-size:14px;color:#bfc5ce;margin-bottom:6px}
+#upNextShow{font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#upNextTitle{font-size:16px;max-height:40px;overflow:hidden;margin-top:4px}
+#upNextDetails{font-size:14px;color:#bfc5ce;margin-top:6px}
+#chapterMenu{position:absolute;left:240px;top:95px;width:800px;padding:28px;background:rgba(13,17,23,.97);border-radius:16px;z-index:450}
+#chapterMenu h2{font-size:27px;font-weight:normal;margin:0 0 18px}
+#chapterRows div{padding:11px 14px;font-size:20px;border-radius:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chapterRows .selected{background:#fff;color:#101217}
+#chapterMenu p{font-size:15px;color:#c2c7ce}
+#featureHint{position:absolute;right:0;bottom:1px;font-size:12px;color:#b8bdc8}
+#playbackHelp[data-extra-focus="true"] #transport span.selected{background:transparent;color:#ddd}
+#playback[data-up-next="true"] #pauseInfo{width:660px}
+#playback[data-up-next="true"] #playingShow,#playback[data-up-next="true"] #playingTitle{max-width:660px}
+#playback[data-up-next="true"] #playingDescription{width:660px}
+#playback[data-up-next="true"] #playingLogo{max-width:620px}

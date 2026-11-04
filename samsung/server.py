@@ -51,7 +51,9 @@ def group_key(programme):
     return ('live:' + programme['id']) if programme.get('live') else title
 
 
-class Gateway:
+from playback_adapter import PlaybackAdapter
+
+class Gateway(PlaybackAdapter):
     def __init__(self, settings, bridge):
         self.settings, self.bridge = settings, bridge
         self.key = Path(settings['device_key_file']).read_text().strip()
@@ -91,6 +93,7 @@ class Gateway:
         except (OSError,ValueError):self.favourite_dates={}
         from episode_freshness import EpisodeFreshness
         self.episode_freshness=EpisodeFreshness(self.discovery_root/'episode-first-seen.json')
+        self.init_playback_features()
         self.result_lists={}
         try:self.favourites=json.loads((self.discovery_root/'favourites.json').read_text())
         except (OSError,ValueError):self.favourites={}
@@ -479,18 +482,20 @@ class Gateway:
                     continue
             if not chosen:raise ValueError('No compatible episode source available.')
             _, episode, prepared = max(chosen, key=lambda entry:entry[0])
+            selected_provider=next((p for e,p in candidates if e["id"]==episode["id"]), "")
             if self.current_job != job:
                 return
             ticket = secrets.token_urlsafe(24)
             duration = seconds(episode.get('duration_seconds'))
             prepared.update(expires=time.time() + 21600, _last_seen=time.time(), endpoint_id='native_samsung',
                 _episode_id=episode.get('_progress_id',episode['id']), _duration=duration, _is_live=bool(episode.get('live')))
+            feature_metadata=self.bind_playback_features(prepared,episode,selected_provider)
             self.bridge.tickets[ticket] = prepared
             self.current_ticket = ticket
             raw_programmes=list(self.bridge.catalogue['programmes'])+list(self.saved_sources.values())+[r['programme'] for r in self.discovery.imported.values()]
             programme = next((p for p in raw_programmes if any(e['id'] == episode['id'] for e in p['episodes'])), {})
             logo_id = hashlib.sha256(group_key(programme).encode()).hexdigest()[:20] if programme else None
-            self.jobs[job] = {'state': 'ready', 'ticket': ticket, 'title': episode['title'],
+            self.jobs[job] = {'state': 'ready', 'ticket': ticket, 'title': episode['title'], 'metadata':feature_metadata,
                 'episode_id': episode.get('_progress_id',episode['id']), 'start_position': episode.get('_start_offset', 0), 'duration_seconds': duration,
                 'brands': provider_brands([programme.get('provider','')]),
                 'show_title': programme.get('title', episode['title']),
@@ -715,6 +720,13 @@ class Gateway:
         async def options(request):
             return web.Response(status=204)
         app.router.add_route('OPTIONS', '/{path:.*}', options)
+        app.router.add_get('/api/playback/capabilities',self.playback_capabilities)
+        app.router.add_get('/api/playback/features',self.playback_features)
+        app.router.add_get('/api/playback/up-next',self.up_next)
+        app.router.add_route('GET','/api/playback/queue',self.series_queue)
+        app.router.add_route('POST','/api/playback/queue',self.series_queue)
+        app.router.add_route('DELETE','/api/playback/queue',self.series_queue)
+        app.router.add_post('/api/playback/queue/advance',self.advance_queue)
         app.router.add_get('/api/library', self.library_api)
         app.router.add_get('/api/suggestions', self.browse_suggestions)
         app.router.add_post('/api/import', self.import_show)
