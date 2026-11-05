@@ -13,6 +13,7 @@ struct Programme: Decodable, Identifiable {
     let hero: String?
     let poster:String?
     let cardArtwork:String?
+    let archiveYear:Int?
     let showLogo: String?
     let channelLogo: String?
     let live: Bool
@@ -207,5 +208,126 @@ enum BrowseOrdering {
             let ar=ranks[a.id] ?? Int.max,br=ranks[b.id] ?? Int.max
             return ar != br ? ar<br : left.offset<right.offset
         }.map(\.element)
+    }
+}
+
+struct EditorialShelf:Identifiable {
+    enum Layout {case landscape,portrait,feature}
+    let id:String
+    let title:String
+    var programmes:[Programme]
+    let layout:Layout
+    var episodeCollection:String?=nil
+}
+struct CollectionDestination:Hashable {
+    let programmeID:String
+    let collection:String
+    var pathValue:String {"collection:"+collection+":"+programmeID}
+    static func parse(_ value:String)->CollectionDestination? {
+        let parts=value.split(separator:":",maxSplits:2).map(String.init)
+        guard parts.count==3,parts[0]=="collection",parts[1]=="christmas",!parts[2].isEmpty else {return nil}
+        return CollectionDestination(programmeID:parts[2],collection:parts[1])
+    }
+}
+struct CuratedEpisode:Identifiable {
+    let programme:Programme
+    let episode:Episode
+    var id:String {episode.id}
+}
+enum EditorialShelves {
+    static func christmasEpisodes(_ programmes:[Programme])->[CuratedEpisode] {
+        let groups=programmes.map{p in p.episodes.filter{matchesChristmas(p,$0)}.map{CuratedEpisode(programme:p,episode:$0)}}
+        var output:[CuratedEpisode]=[];var seen=Set<String>();var index=0
+        while groups.contains(where:{$0.count>index}) && output.count<48 {
+            for group in groups where group.count>index {
+                let entry=group[index]
+                if seen.insert(entry.id).inserted {output.append(entry)}
+            }
+            index+=1
+        }
+        return Array(output.prefix(48))
+    }
+    static func christmas(_ title:String)->Bool {
+        title.range(of:"\\b(christmas(?:sy)?|xmas|yuletide|festive (?:special|edition))\\b",options:[.regularExpression,.caseInsensitive]) != nil
+    }
+    static func matchesChristmas(_ programme:Programme,_ episode:Episode)->Bool {
+        christmas(programme.title) || christmas(episode.title) || (episode.description ?? "").range(of:"\\b(christmas|festive) (special|edition)\\b",options:[.regularExpression,.caseInsensitive]) != nil
+    }
+    static func make(_ candidates:[Programme],films:Bool,year:Int=Calendar.current.component(.year,from:Date()),rotationDay:Int?=nil)->[EditorialShelf] {
+        func titleKey(_ p:Programme)->String {p.title.folding(options:[.diacriticInsensitive,.caseInsensitive],locale:Locale(identifier:"en_GB")).replacingOccurrences(of:"[^\\w]+",with:" ",options:.regularExpression).trimmingCharacters(in:.whitespacesAndNewlines)}
+        let eligible=candidates.filter{!$0.live && $0.film==films}
+        var preferred:[String:Programme]=[:]
+        func familiarity(_ p:Programme)->Int {(p.recent || p.latestProgress>0 ? 4 : 0)+(p.favourite ? 2 : 0)+(p.discoveryRef == nil ? 1 : 0)}
+        for p in eligible {let key=titleKey(p);if preferred[key] == nil || familiarity(p)>familiarity(preferred[key]!) {preferred[key]=p}}
+        var known=Set<String>()
+        let source=eligible.compactMap{p->Programme? in let key=titleKey(p);return known.insert(key).inserted ? preferred[key] : nil}
+        guard !source.isEmpty else {return []}
+        let now=Date();let calendar=Calendar.current
+        let day=rotationDay ?? Int(calendar.startOfDay(for:now).timeIntervalSince1970/86400)
+        func rank(_ key:String)->String {SHA256.hash(data:Data("\(day):\(key)".utf8)).map{String(format:"%02x",$0)}.joined()}
+        var result:[EditorialShelf]=[];var uses:[String:Int]=[:]
+        func add(_ key:String,_ title:String,_ input:[Programme],feature:Bool=false,collection:String?=nil,explore:Bool=false) {
+            let eligible=input.filter{uses[$0.id,default:0]<2}
+            let posters=eligible.filter{$0.poster?.isEmpty == false}
+            let minimum=feature ? 3 : 4
+            let portrait=collection == nil && posters.count>=minimum
+            let candidates=portrait ? posters : eligible
+            let limit=feature ? 8 : 16
+            let selected:[Programme]
+            if explore {
+                let fresh=Array(candidates.filter{!$0.favourite && !$0.recent && $0.latestProgress==0}.prefix(64))
+                let close=Array(fresh.prefix(2))
+                let broader=fresh.dropFirst(2).sorted{rank(key+":"+$0.id)<rank(key+":"+$1.id)}
+                let newCount=max(2,Int(ceil(Double(limit)*0.75)))
+                let discoveries=Array((close+broader).prefix(newCount))
+                let selectedIDs=Set(discoveries.map(\.id))
+                let familiar=candidates.filter{!selectedIDs.contains($0.id)}
+                selected=Array((discoveries+familiar).prefix(limit))
+            } else {selected=Array(candidates.prefix(limit))}
+            let cardCount=collection == "christmas" ? christmasEpisodes(selected).count : selected.count
+            guard cardCount>=minimum || result.isEmpty else {return}
+            let ids=Set(selected.map(\.id))
+            guard !result.contains(where:{row in row.episodeCollection == collection && Double(ids.intersection(row.programmes.map(\.id)).count)/Double(max(1,ids.union(row.programmes.map(\.id)).count))>0.8}) else {return}
+            result.append(EditorialShelf(id:key,title:title,programmes:selected,layout:portrait ? (feature ? .feature : .portrait) : .landscape,episodeCollection:collection))
+            for p in selected {uses[p.id,default:0]+=1}
+        }
+        add("personal",films ? "Picked for tonight" : "Your next great watch",Array(source.prefix(20)))
+        let festive=source.filter{p in !p.episodes.isEmpty && p.episodes.contains{matchesChristmas(p,$0)}}
+        let month=calendar.component(.month,from:now),date=calendar.component(.day,from:now)
+        if month>=11 || (month==1 && date<=6) {add("christmas","Christmas Specials",festive,collection:"christmas")}
+        var themes:[(String,String,[Programme],Bool)]=[("archive","From the Archive",source.filter{($0.archiveYear ?? Int.max)<=year-15},true)]
+        func provider(_ p:Programme,_ key:String)->Bool {p.brands.contains{$0.id.lowercased()==key || (key=="bbc" && $0.name.localizedCaseInsensitiveContains("iplayer"))}}
+        themes.append(("iplayer","Best of iPlayer",source.filter{provider($0,"bbc")},true))
+        let categories:[(String,String,[String])]=films ? [
+            ("comedy","A night of laughs",["comedy"]),("crime","Crime & suspense",["crime","thriller","mystery"]),
+            ("true","True stories",["documentar","factual"]),("adventure","Escape into adventure",["adventure","action","fantasy","science fiction"]),
+            ("drama","Stories that stay with you",["drama"]),("family","Family film night",["family","children","animation"])
+        ] : [
+            ("comedy","Comedy favourites",["comedy"]),("true","Real lives. Remarkable stories.",["documentar","factual"]),
+            ("crime","Crime & mystery",["crime","mystery","thriller"]),("adventure","Extraordinary worlds",["nature","science","adventure","fantasy"]),
+            ("drama","Get lost in a great drama",["drama"]),("entertainment","Something to make you smile",["entertainment","talk"])
+        ]
+        for (key,title,genres) in categories {
+            themes.append((key,title,source.filter{p in p.genres.contains{g in genres.contains{g.localizedCaseInsensitiveContains($0)}}},key=="adventure"))
+        }
+        for (key,title) in [("channel4","Channel 4 discoveries"),("u","Worth your time on U"),("itv","Discover ITVX"),("channel5","Discover 5")] {
+            themes.append((key,title,source.filter{provider($0,key)},false))
+        }
+        for (key,title,rows,feature) in themes.sorted(by:{if ($0.0=="archive") != ($1.0=="archive") {return $0.0=="archive"};return rank($0.0)<rank($1.0)}) {add(key,title,rows,feature:feature,explore:true)}
+        // Every remaining title is reachable. Merge a short tail into the last
+        // row instead of generating a lonely row of one or two cards.
+        var remaining=source.filter{uses[$0.id,default:0]==0}
+        var page=0
+        while !remaining.isEmpty {
+            let count=remaining.count<=15 ? remaining.count : 12
+            var chunk=Array(remaining.prefix(count));remaining.removeFirst(count)
+            if chunk.count<4,result.count>0 {
+                if let index=result.lastIndex(where:{$0.layout == .landscape}) {result[index].programmes.append(contentsOf:chunk);break}
+                let existing=Set(chunk.map(\.id));chunk.append(contentsOf:source.filter{!existing.contains($0.id)}.prefix(8-chunk.count))
+            }
+            result.append(EditorialShelf(id:"explore-\(page)",title:page==0 ? (films ? "More films to explore" : "More shows to discover") : "",programmes:chunk,layout:chunk.count>=4 && chunk.allSatisfy{$0.poster?.isEmpty == false} ? .portrait : .landscape))
+            page+=1
+        }
+        return result
     }
 }

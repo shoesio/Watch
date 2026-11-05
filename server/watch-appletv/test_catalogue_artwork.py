@@ -27,3 +27,12 @@ class Tests(unittest.TestCase):
   row=self.art.enrich(self.row());self.assertTrue(row['show_logo'].startswith('http://host:8109/static/show-logos/'));self.assertNotIn('token',json.dumps(row))
  def test_poster_path_allowlist(self):
   for path in ('https://evil/test.jpg','/../key.jpg','/x.png','/x.jpg?token=a',None):self.assertIsNone(poster_url(path))
+ def test_archive_year_needs_release_date_or_completed_series(self):
+  self.art.enrich(self.row());client=Client();client.match=lambda *args:{'id':12,'_media_type':'tv','status':'Ended','last_air_date':'2004-05-06'}
+  self.art.refresh(client=client);row=self.art.enrich(self.row());self.assertEqual(row['archive_year'],2004)
+  other={**self.row(),'title':'Ongoing series'};self.art.enrich(other)
+  client.match=lambda *args:{'id':13,'_media_type':'tv','status':'Returning Series','last_air_date':'2004-05-06'}
+  self.art.refresh(client=client);self.art.enrich(other);self.assertNotIn('archive_year',other)
+ def test_film_archive_year_uses_movie_date(self):
+  movie=self.row(True);self.art.enrich(movie);client=Client();client.match=lambda *args:{'id':14,'_media_type':'movie','release_date':'1999-01-01'}
+  self.art.refresh(client=client);self.art.enrich(movie);self.assertEqual(movie['archive_year'],1999)

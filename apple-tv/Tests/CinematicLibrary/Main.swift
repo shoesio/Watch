@@ -1,8 +1,11 @@
 import Foundation
 @main struct Checks {
     static func main() throws {
-        func programme(_ episodes:[[String:Any]],film:Bool=false,live:Bool=false,id:String="test",title:String="Test show",favouriteAt:Double=0)->Programme {
-            let value:[String:Any] = ["id":id,"title":title,"favourite_at":favouriteAt,"live":live,"film":film,"recent":true,"favourite":true,"genres":[],"brands":[],"episodes":episodes]
+        func programme(_ episodes:[[String:Any]],film:Bool=false,live:Bool=false,id:String="test",title:String="Test show",favouriteAt:Double=0,poster:String?=nil,genres:[String]=[],archiveYear:Int?=nil,favourite:Bool=true,recent:Bool=true,brandID:String?=nil)->Programme {
+            var value:[String:Any] = ["id":id,"title":title,"favourite_at":favouriteAt,"live":live,"film":film,"recent":recent,"favourite":favourite,"genres":genres,"brands":[],"episodes":episodes]
+            if let poster {value["poster"]=poster}
+            if let archiveYear {value["archive_year"]=archiveYear}
+            if let brandID {value["brands"]=[["id":brandID,"name":brandID=="bbc" ? "BBC iPlayer" : brandID,"image":"http://host/static/artwork/brands/"+brandID+".png"]]}
             return try! JSONDecoder.watch.decode(Programme.self,from:JSONSerialization.data(withJSONObject:value))
         }
         func ep(_ id:String,_ season:String,_ number:Int,_ updated:Double=0)->[String:Any] {
@@ -28,6 +31,43 @@ import Foundation
         precondition(BrowseOrdering.personal([z,a],recommended:[]).first?.id=="z","A tie silently reverted to alphabetic order")
         precondition(programme([],title:"QI XL").editionLabel=="QI XL · Extended")
         precondition(programme([],title:"Taskmaster Bleeped").editionLabel=="Bleeped")
+        let pool=(0..<25).map {i in programme([],id:"show-\(i)",title:"Show \(i)",poster:i<9 ? "https://images.example/poster.jpg" : nil,genres:i%2==0 ? ["Comedy"] : ["Drama"],archiveYear:i<5 ? 1999 : nil)}
+        let movie=programme([],film:true,id:"film",title:"A film")
+        let shelves=EditorialShelves.make(pool+[movie],films:false,year:2026)
+        precondition(shelves.allSatisfy{$0.programmes.allSatisfy{!$0.film && !$0.live}})
+        precondition(shelves.allSatisfy{$0.programmes.count>=3},"A short tail produced an orphan shelf")
+        precondition(shelves.filter{$0.layout != .landscape}.allSatisfy{$0.programmes.allSatisfy{$0.poster != nil}},"Portrait rows used landscape crops")
+        precondition(Set(shelves.flatMap{$0.programmes.map(\.id)})==Set(pool.map(\.id)),"A title disappeared while theming")
+        precondition(shelves.first(where:{$0.id=="archive"})?.programmes.allSatisfy{($0.archiveYear ?? 9999)<=2011} == true)
+        precondition(EditorialShelves.make(pool+[movie],films:true).flatMap(\.programmes).allSatisfy(\.film))
+        precondition(EditorialShelves.matchesChristmas(pool[0],programme([["id":"x","title":"Christmas Special","brands":[]]]).episodes[0]))
+        precondition(!EditorialShelves.matchesChristmas(pool[0],programme([["id":"x","title":"Episode 1","brands":[]]]).episodes[0]))
+        let collection=CollectionDestination(programmeID:"discover_123",collection:"christmas")
+        precondition(CollectionDestination.parse(collection.pathValue)==collection)
+        precondition(CollectionDestination.parse("plain-programme-id")==nil)
+        precondition(CollectionDestination.parse("collection:unknown:123")==nil)
+        let dayA=EditorialShelves.make(pool,films:false,year:2026,rotationDay:100)
+        let dayARepeat=EditorialShelves.make(pool,films:false,year:2026,rotationDay:100)
+        precondition(dayA.map(\.id)==dayARepeat.map(\.id),"Themes moved around during one day's browsing")
+        precondition(dayA.first?.id=="personal","Rotation moved the personal shelf")
+        let festiveA=programme([ep("Christmas Special","1",1),ep("Ordinary episode","1",2)],id:"festive-a")
+        let festiveB=programme([ep("Xmas Treat","2",1),ep("Christmas Edition","2",2)],id:"festive-b")
+        let episodeCards=EditorialShelves.christmasEpisodes([festiveA,festiveB])
+        precondition(episodeCards.map(\.id)==["Christmas Special","Xmas Treat","Christmas Edition"],"Christmas cards selected unrelated episodes or lost interleaving")
+        precondition(episodeCards[1].programme.id=="festive-b" && episodeCards[1].episode.id=="Xmas Treat","Christmas playback target drifted to the show's preferred episode")
+        let familiar=(0..<4).map{programme([],id:"known-\($0)",title:"Known \($0)",poster:"https://images.example/p.jpg",brandID:"bbc")}
+        let fresh=(0..<40).map{programme([],id:"new-\($0)",title:"New \($0)",poster:"https://images.example/p.jpg",favourite:false,recent:false,brandID:"bbc")}
+        let discoveryA=EditorialShelves.make(familiar+fresh,films:false,rotationDay:100)
+        let discoveryB=EditorialShelves.make(familiar+fresh,films:false,rotationDay:101)
+        let bbcA=discoveryA.first{$0.id=="iplayer"}!,bbcB=discoveryB.first{$0.id=="iplayer"}!
+        precondition(bbcA.programmes.filter{!$0.favourite && !$0.recent}.count>=6,"Provider themes did not introduce enough unseen programmes")
+        precondition(bbcA.programmes.map(\.id) != bbcB.programmes.map(\.id),"Broader discoveries never changed")
+        precondition(discoveryA.first!.programmes.map(\.id)==discoveryB.first!.programmes.map(\.id),"Discovery rotation shuffled the personal shelf")
+        let preview=programme([],id:"preview",title:"Known 0",favourite:false,recent:false,brandID:"bbc")
+        let deduped=EditorialShelves.make([preview]+familiar+fresh,films:false,rotationDay:100)
+        precondition(!deduped.flatMap(\.programmes).contains{$0.id=="preview"},"An already-known programme was presented as a new provider discovery")
+        let continuation=discoveryA.filter{$0.id.hasPrefix("explore-")}
+        precondition(continuation.dropFirst().allSatisfy{$0.title.isEmpty},"Every continuation row received another generic heading")
         print("Cinematic library checks passed: later episodes/seasons, watched editions, specials, films/live exclusion and backwards-compatible artwork")
     }
 }

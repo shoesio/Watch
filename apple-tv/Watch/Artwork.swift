@@ -500,14 +500,16 @@ struct CinematicProgrammeCard:View {
     let programme:Programme
     var style:BrowseCardStyle = .portrait
     var shelf=false
+    var episodeCollection:String?=nil
+    var explicitEpisode:Episode?=nil
     @Environment(\.watchCardWidth) private var availableWidth
     @State private var artworkHasTitle=true
     private var editorial:Bool {style == .portrait || style == .showcase || style == .landscape}
     private var portrait:Bool {(style == .portrait || style == .showcase) && programme.poster?.isEmpty == false}
     private var width:CGFloat {shelf ? (style == .showcase ? 480 : portrait ? 310 : 440) : availableWidth}
     private var height:CGFloat {portrait ? width*1.5 : width*9/16}
-    private var episode:Episode? {programme.resume ?? programme.preferred}
-    private var source:String? {portrait ? programme.poster : (editorial ? programme.cardArtwork ?? programme.hero ?? programme.artwork : episode?.thumbnail ?? programme.artwork)}
+    private var episode:Episode? {if let explicitEpisode {return explicitEpisode};return episodeCollection == "christmas" ? programme.episodes.first{EditorialShelves.matchesChristmas(programme,$0)} : programme.resume ?? programme.preferred}
+    private var source:String? {if episodeCollection == "christmas" {return episode?.thumbnail ?? programme.artwork};return portrait ? programme.poster : (editorial ? programme.cardArtwork ?? programme.hero ?? programme.artwork : episode?.thumbnail ?? programme.artwork)}
     private var caption:String {
         guard let episode else {return ""}
         var parts:[String]=[]
@@ -516,7 +518,7 @@ struct CinematicProgrammeCard:View {
             if let number=episode.episodeNumber,number>0 {parts.append("E\(number)")}
         }
         let identity=parts.joined(separator:", ")
-        return [identity,episode.durationSeconds.flatMap {$0>0 ? "\(Int(($0/60).rounded()))m" : nil} ?? ""].filter{!$0.isEmpty}.joined(separator:" • ")
+        return [episodeCollection == "christmas" ? programme.editionLabel ?? "" : "",identity,episode.durationSeconds.flatMap {$0>0 ? "\(Int(($0/60).rounded()))m" : nil} ?? ""].filter{!$0.isEmpty}.joined(separator:" • ")
     }
     var body:some View {
         ZStack(alignment:.bottomLeading) {
@@ -531,8 +533,11 @@ struct CinematicProgrammeCard:View {
                 }.padding(22).frame(width:width,alignment:.bottom)
             } else if !editorial && !portrait {
                 HStack(alignment:.bottom,spacing:12) {
-                    Text(caption.isEmpty ? programme.title : caption)
-                        .font(.system(size:21,weight:.medium)).lineLimit(1)
+                    VStack(alignment:.leading,spacing:5) {
+                        if episodeCollection == "christmas",let episode {Text(episode.title).font(.system(size:20,weight:.semibold)).lineLimit(1)}
+                        Text(caption.isEmpty ? programme.title : caption)
+                            .font(.system(size:episodeCollection == "christmas" ? 18 : 21,weight:.medium)).lineLimit(1)
+                    }
                     Spacer(minLength:0)
                     Brands(items:episode?.brands.isEmpty == false ? episode!.brands : programme.brands)
                 }.padding(.horizontal,22).padding(.bottom,22)
@@ -555,7 +560,7 @@ struct CinematicProgrammeCard:View {
                 VStack {Spacer();HStack {Text(edition).font(.system(size:17,weight:.semibold)).padding(.horizontal,12).padding(.vertical,7).background(.black.opacity(0.78),in:Capsule());Spacer()}}
                     .padding(.horizontal,16).padding(.bottom,16)
             }
-            if programme.hasNewEpisode {
+            if programme.hasNewEpisode && episodeCollection == nil {
                 VStack {HStack {if style == .continuing {Spacer()};Text("New episode").font(.system(size:17,weight:.semibold)).foregroundStyle(.black).padding(.horizontal,12).padding(.vertical,7).background(.white,in:RoundedRectangle(cornerRadius:6));if style != .continuing {Spacer()}};Spacer()}.padding(16)
             }
         }.frame(width:width,height:height).clipShape(RoundedRectangle(cornerRadius:WatchDesign.radius))

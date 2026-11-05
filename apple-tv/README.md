@@ -389,3 +389,37 @@ dates and recommendation order instead of alphabetic ties. Ambiguous editions
 (such as QI XL, bleeped Taskmaster and regional/special versions) have edition
 badges. The carousel's on-device navigation improvement was viewer-confirmed;
 the final return-to-hero and edition changes still require remote verification.
+
+### Themed browsing (build 54)
+
+Shows and Films now use curated shelves instead of the default catalogue wall.
+Provider, genre, archival and seasonal collections are built from available
+metadata, with personal order retained inside each collection. Secondary themes
+rotate deterministically by day; the personal shelf remains first. Portrait and
+feature rows use genuine matched posters; other rows stay landscape. Short tails
+merge into fuller rows, and all remaining titles stay reachable in exploration
+shelves. Explicit Favourites/UHD filters retain a focused catalogue view.
+
+Christmas shelves appear in November–early January when there are enough matching
+episodes. Each card shows a specific episode's available thumbnail, title and
+edition, and plays that exact episode rather than the programme's preferred one.
+Only explicit Christmas titles or special/edition descriptions qualify. Round-
+robin ordering balances series. Contextual collection navigation also uses the
+same String-valued stack as normal series routes, fixing the old mixed-type links.
+A restrained gold header accent distinguishes the shelf; cards use their episode
+artwork and titles without an extra Christmas badge. "From the Archive" uses dated movies or completed series
+with a verified older final-air date; an ongoing show's first season is insufficient.
+
+Pure-model checks cover homogeneous poster rows, film/show separation, no lost
+catalogue titles, short tails, archive eligibility, stable daily rotation, collection
+routes and exact Christmas episode targets. Build 54 is installed. Direct Christmas-card selection still awaits physical-device
+verification; the original viewing session is being resumed rather than interrupted
+for a playback test.
+
+Secondary theme shelves now favour unseen material: two close-ranked discoveries,
+a daily stable selection from a broader matching pool, then familiar choices to
+complete the row. The personal shelf is unchanged. Canonical library entries take
+precedence over same-title discovery previews, so an already-known show is not
+reintroduced as a novel listing from another provider. Continuation rows share one
+heading rather than repeating "Keep exploring". Model checks cover these ordering,
+rotation, identity and heading guarantees.

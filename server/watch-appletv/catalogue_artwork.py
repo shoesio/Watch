@@ -44,6 +44,9 @@ class CatalogueArtwork:
                 url = poster_url(row.get('poster_path'))
                 if url:
                     value['poster'] = url
+                archive=row.get('archive_year')
+                if isinstance(archive,int) and 1888<=archive<=time.gmtime().tm_year:
+                    value['archive_year']=archive
                 backdrop=poster_url(row.get('backdrop_path'))
                 if backdrop:
                     value['card_artwork']=backdrop.replace('/w780/','/w1280/')
@@ -76,7 +79,7 @@ class CatalogueArtwork:
             candidates = sorted(self.pending.items(), key=lambda pair: pair[1][0])
         checked = 0
         for key, (_, title, kind) in candidates:
-            if self.cache.get(key, {}).get('backdrop_checked') and time.time() - self.cache.get(key, {}).get('checked_at', 0) < 14 * 86400:
+            if self.cache.get(key, {}).get('editorial_schema') == 1 and self.cache.get(key, {}).get('backdrop_checked') and time.time() - self.cache.get(key, {}).get('checked_at', 0) < 14 * 86400:
                 continue
             ident = identity(title)
             known = manifest.get(ident, {})
@@ -88,9 +91,13 @@ class CatalogueArtwork:
                     match = client.match(title, kind)
                     if match and match.get('_media_type', kind) != kind:
                         match = None
-                row = {'checked_at': time.time(), 'title': title, 'media_type': kind, 'backdrop_checked':True}
+                row = {'checked_at': time.time(), 'title': title, 'media_type': kind, 'backdrop_checked':True,'editorial_schema':1}
                 if match:
                     row['tmdb_id'] = match['id']
+                    date=match.get('release_date') if kind=='movie' else match.get('last_air_date') if match.get('status') in ('Ended','Canceled') else None
+                    if isinstance(date,str) and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}',date):
+                        year=int(date[:4])
+                        if 1888<=year<=time.gmtime().tm_year:row['archive_year']=year
                     if poster_url(match.get('backdrop_path')):row['backdrop_path']=match['backdrop_path']
                     if poster_url(match.get('poster_path')):
                         row['poster_path'] = match['poster_path']
