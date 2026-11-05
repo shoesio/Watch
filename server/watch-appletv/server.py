@@ -1,6 +1,7 @@
 """Isolated, paired tvOS API. Never sends commands to network playback endpoints."""
 import argparse, asyncio, contextlib, hashlib, hmac, ipaddress, json, logging, math, os, secrets, sys, time
 from pathlib import Path
+import aiohttp
 from aiohttp import web
 
 def stream_quality(width, height):
@@ -15,6 +16,9 @@ class Gateway:
         self.root = Path(settings['private_root']) / 'appletv'
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.jobs, self.sessions, self.tasks, self.attempts = {}, {}, set(), {}
+        from scene_light import SceneLight
+        config=getattr(bridge,'config',{})
+        self.scene_light=SceneLight(settings.get('scene_light_entity'),config.get('ha_url',''),getattr(bridge,'token',''))
         self.preparing = asyncio.Lock()
         from playback_features import PlaybackFeatures
         self.features=PlaybackFeatures(self.root)
@@ -472,7 +476,30 @@ class Gateway:
             if job.get('ticket'): await self.release(job['ticket'])
         return web.Response(status=204)
 
+    async def scene_calibration_api(self,request):
+        lease='calibration:'+self.paired(request)
+        try:
+            if request.method=='DELETE':await self.scene_light.restore(lease);return web.json_response({'ok':True})
+            if not self.scene_light.entity:return web.json_response({'error':'Scene lighting has not been configured for this lamp.'},status=503)
+            await self.scene_light.expire()
+            if self.scene_light.owner not in (None,lease):return web.json_response({'error':'Stop playback before calibrating the lamp.'},status=409)
+            data=await request.json()
+            result=await self.scene_light.colour(lease,data.get('hue'),precise=True)
+            if self.scene_light.owner!=lease:return web.json_response({'error':'The lamp was changed elsewhere. Close and reopen calibration to try again.'},status=409)
+            return web.json_response(result)
+        except (aiohttp.ClientError,asyncio.TimeoutError):return web.json_response({'error':'Could not reach Behind TV. Please try again.'},status=503)
+
+    async def scene_light_api(self,request):
+        if request.method=='GET':return web.json_response(self.scene_light.status())
+        data=await request.json();ticket=data.get('ticket');session=self.sessions.get(ticket) if isinstance(ticket,str) else None
+        if not session or session['device']!=self.paired(request):raise web.HTTPNotFound()
+        try:
+            if request.method=='DELETE':await self.scene_light.restore(ticket);return web.json_response({'ok':True})
+            return web.json_response(await self.scene_light.colour(ticket,data.get('hue'),data.get('white',False)))
+        except (aiohttp.ClientError,asyncio.TimeoutError):return web.json_response({'error':'Scene lighting is temporarily unavailable.'},status=503)
+
     async def release(self, ticket):
+        with contextlib.suppress(Exception):await self.scene_light.restore(ticket)
         value = self.sessions.pop(ticket, None)
         if value and value['stream']: await value['stream'].close()
 
@@ -514,6 +541,7 @@ class Gateway:
     async def maintenance(self):
         while True:
             await asyncio.sleep(15)
+            with contextlib.suppress(Exception):await self.scene_light.expire()
             now = time.time()
             for ticket, value in list(self.sessions.items()):
                 if now-value['seen'] > 120: await self.release(ticket)
@@ -532,6 +560,7 @@ class Gateway:
         for task in self.tasks: task.cancel()
         await asyncio.gather(*self.background, *self.tasks, return_exceptions=True)
         for ticket in list(self.sessions): await self.release(ticket)
+        with contextlib.suppress(Exception):await self.scene_light.close()
 
     def app(self):
         @web.middleware
@@ -543,6 +572,11 @@ class Gateway:
                 return await handler(request)
             except (ValueError, TypeError): return web.json_response({'error':'Invalid request.'}, status=400)
         app = web.Application(middlewares=[auth], client_max_size=4096)
+        app.router.add_post('/scene-light/calibration',self.scene_calibration_api)
+        app.router.add_delete('/scene-light/calibration',self.scene_calibration_api)
+        app.router.add_get('/scene-light',self.scene_light_api,allow_head=False)
+        app.router.add_post('/scene-light',self.scene_light_api)
+        app.router.add_delete('/scene-light',self.scene_light_api)
         app.router.add_get('/health', lambda r:web.json_response({'ok':True,'version':'1.0'}))
         app.router.add_post('/pair', self.pair)
         app.router.add_get('/library', self.library)

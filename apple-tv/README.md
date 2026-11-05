@@ -284,3 +284,61 @@ UHD now also discovers programmes from the BBC's published UHD article, rather t
 The initial list contained 95 distinct BBC links; current validation yielded 90 programme entries, projected as 86 show/special tiles and three film tiles after canonical grouping. These are catalogue-verified UHD listings, not a claim that every title was individually playback-tested.
 
 The collection menu is a full-width focus section with explicit Up routing from any first-row grid card and Down routing back to the first result. This removes dependence on having a fourth/rightmost card beneath the menu. Build and 25 catalogue/gateway tests passed; build 30 installed on the physical Apple TV. Short-row Siri Remote focus still requires physical confirmation.
+
+
+### Scene lighting — build 32
+
+Settings → Scene lighting optionally follows the predominant scene hue on the Home Assistant lamp configured by the host. The current installation targets Behind TV Light. Colourful scenes use 100% saturation; grey, black and white scenes request white (zero saturation). The feature never sends a scene-dependent brightness value: the lamp's starting brightness is preserved. On exit/disable, the prior colour/saturation/on-off state is restored. Manual lamp changes take priority and suspend the effect until a later playback session.
+
+Apple TV samples a small SDR thumbnail from AVFoundation-exposed frames every two seconds, with read-only video output and no display capture or video re-encoding. No frames leave Apple TV. Area-based neighbouring hue clusters choose the dominant colour; bright highlights or a small green subject cannot outweigh a larger dark-blue area. Circular temporal smoothing and three-second lamp transitions soften changes. Neutral scenes remain white; there is no blue-only hue remapping. Fixed lamp brightness means the source's literal darkness cannot be reproduced.
+
+The host accepts hue/neutral updates only from the paired owner of a valid playback ticket, controls only its configured lamp, rate-limits changes, and expires abandoned lighting leases. The Home Assistant credential stays on the Pi. Streams using protected native FairPlay paths are not sampled; unavailable frames leave the lamp alone.
+
+Validation: native build succeeded; colour tests cover mixed/nearby hues, dark sea with a bright turtle, dark red with yellow highlights, neutral scenes, transparent/missing frames and red hue wraparound. Eight lighting/boundary tests plus existing gateway/native/features checks passed (56 total in the targeted host run). The real lamp accepted colour at full saturation and white at zero saturation while remaining at brightness 255, then restored its original [253.701, 67.717] hue/saturation. Initial physical UHD playback with sampling remained 3840×2160 with about 30 seconds buffered and zero stalls/retries; the user confirmed the effect looked good. Build 32 changed hue selection to area voting across the full spectrum and was installed with the programme resumed. Longer viewing and protected-stream behaviour retain the limitations above.
+
+
+### Scene hue calibration — build 33
+
+Settings → Calibrate scene colours opens a full-screen reference swatch with a compact bottom control panel. Choose Red, Orange, Yellow, Green, Turquoise, Navy, Blue, Purple or Pink, then adjust the real Behind TV lamp using ±1° or ±5° controls. Calibration preview uses full saturation without brightness commands. Match hue rather than the darkness of a reference swatch: a lamp held at fixed brightness cannot reproduce a dark screen's luminance.
+
+Save calibration commits all draft reference adjustments; Cancel/Back discards them. Reset colour and Reset all operate on the draft until Save is chosen. Saved hue offsets are bounded and interpolate circularly between neighbouring references, leaving unrelated references unchanged. Neutral scene white is not affected. Preview ends and restores the prior lamp state on leaving the screen or losing its heartbeat. The pairing-protected host calibration route cannot take over an active playback lease or restore another device's calibration lease. Fine adjustment previews bypass normal scene hysteresis, using short transitions so 1° changes reach the lamp.
+
+Validation: build 33 compiled and installed on physical Apple TV; the full-screen reference/menu/control layout was captured and checked. HA readback confirmed the lamp changed with the reference selection at brightness 255. Calibration identity/interpolation/wraparound/persistence/bounds tests passed, along with 58 targeted host tests including preview ownership and precise 1° updates. Final perceptual matching and Save/Cancel operation with the Siri Remote remain user-operated checks; no subjective calibration values were chosen on the user's behalf.
+
+
+Scene-light transition update (5 November): playback colour changes and restoration now use three-second Home Assistant fades. Calibration retains 0.4-second preview fades. Manual colour-override checks wait for the requested fade to settle; turning the lamp off or changing brightness still takes priority. Twelve targeted lighting/ownership tests passed, including the three-second duration and in-progress fade handling. No app update or brightness adjustment is required for this host-side timing change.
+
+### Up next (build 34)
+
+The artwork-led Up next card appears at verified credits, or during the final ten
+seconds if no valid credits marker is available. The fallback is a near-end cue,
+not an inferred credits or skip marker. With Autoplay enabled, the ring counts
+down using episode-relative playback time, so pausing and buffering do not run
+out a wall-clock timer. Natural completion is still required before automatic
+queue advancement. Keep watching cancels automatic continuation for that episode.
+
+Watch fetches the next episode's catalogue entry while the card is visible. It
+does not prepare another media session during playback: the host currently
+advertises no preloading support and preparing relay media can replace the active
+session. Stream preparation therefore starts after natural completion (or an
+explicit Play next action); instant playback is not guaranteed.
+
+Build 35 keeps the automatic Up next card compact and content-sized at the bottom
+right, without the large image header. During successful automatic handoff it
+retains the compact cue rather than mounting the manual queue panel; queue errors
+and manual Up next still provide the full panel and recovery controls.
+
+Build 36 restores AVKit's native tvOS transport and Siri Remote seeking, with a
+non-interactive show/channel logo and provider overlay that fades with the system
+controls. Actual-resolution quality badges remain. Chapters and episode actions
+are in the native transport menus. The native seek delegate clears Watch's paused
+anchor and records the episode-relative target for completion guards. Native
+seeking follows the asset's advertised seekable ranges; growing relays do not gain
+full-episode seekability merely by changing their controls.
+
+The compact automatic Up next card includes a fixed-size episode thumbnail beside
+the title and caption, with Next and Exit actions. Exit cancels autoplay and returns
+to the library; the image does not create a tall empty header.
+
+Build 37 sets AVKit's playback-bar title to the episode title only. The show name
+remains in the separate logo area instead of being repeated in the transport.

@@ -23,3 +23,8 @@ PYTHONPATH=server/tv-favourites python3 -m unittest discover -s server/watch-app
 ```
 
 Install the component requirements before running the remaining backend suites. Some historical browser tests expect the original private `dashboard-fixture.json`; that personal catalogue fixture is intentionally excluded from this repository. No fresh Xcode build or physical playback test was performed for this source import.
+
+
+## Optional Watch scene lighting
+
+The Apple TV gateway accepts `scene_light_entity` in its private settings file (default `null`). Set it to a colour-capable Home Assistant `light.*` entity, then enable Scene lighting in Watch Settings. The installed example target is `light.living_room_behind_tv`. The existing bridge Home Assistant credential stays server-side. Paired `/scene-light` updates require ownership of an active playback ticket and accept hue plus a neutral/white flag; callers cannot select arbitrary entities or brightness. Session cleanup and abandoned-lease expiry restore the captured lamp state; manual overrides take priority. See [Apple TV notes](../apple-tv/README.md) for sampling availability and validation limits.

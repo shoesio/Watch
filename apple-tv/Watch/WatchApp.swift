@@ -16,6 +16,8 @@ import AVFoundation
                         let position=Double(parts.queryItems?.first(where:{$0.name=="position"})?.value ?? "")
                         Task { await library.openEpisode(id,position:position) }
                     }
+                    if url.host == "calibrate-light" {library.tab = .settings;library.showLightCalibration=true}
+                    if url.host == "scene-light",let value=parts.queryItems?.first(where:{$0.name=="enabled"})?.value,["on","off"].contains(value) {UserDefaults.standard.set(value=="on",forKey:"watch.sceneLighting")}
                     if url.host == "browse",let section=parts.queryItems?.first(where:{$0.name=="section"})?.value,let tab=AppTab(rawValue:section) { library.tab=tab }
                     if url.host == "show",let id=parts.queryItems?.first(where:{$0.name=="programme"})?.value {
                         library.tab = .shows
@@ -41,6 +43,7 @@ enum AppTab:String { case home,shows,films,live,search,settings }
     @Published var lastUpdated: Date?
     @Published var deepPlay: PlaybackSelection?
     @Published var tab:AppTab = .home
+    @Published var showLightCalibration=false
     @Published var searchQuery=""
     @Published var routeProgrammeID:String?
     @Published var recommendations:[Programme]=[]
@@ -178,6 +181,7 @@ enum SettingsProvider:String,CaseIterable,Identifiable {
 
 struct SettingsView:View {
     @EnvironmentObject private var library:LibraryStore
+    @AppStorage("watch.sceneLighting") private var sceneLighting=false
     @AppStorage("watch.autoplayNext") private var autoplayNext=false
     @State private var connected:Set<SettingsProvider>=[]
     var body:some View {
@@ -209,11 +213,23 @@ struct SettingsView:View {
                             Text("A ten-second countdown lets you cancel.").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
                         }
                     }.padding(24).background(.white.opacity(0.055),in:RoundedRectangle(cornerRadius:18))
+                    Toggle(isOn:$sceneLighting) {
+                        VStack(alignment:.leading,spacing:6) {
+                            Text("Scene lighting").font(.system(size:26,weight:.medium))
+                            Text("Behind TV · scene hue, white for neutral scenes").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
+                        }
+                    }.padding(24).background(.white.opacity(0.055),in:RoundedRectangle(cornerRadius:18))
+                    Button {library.showLightCalibration=true} label: {
+                        HStack {Label("Calibrate scene colours",systemImage:"slider.horizontal.3");Spacer();Image(systemName:"chevron.right")}.font(WatchDesign.body).frame(maxWidth:.infinity)
+                    }.buttonStyle(WatchActionButtonStyle()).focusEffectDisabled()
+                    Text("Brightness stays at its starting level. Previous lighting returns when playback ends. Available on streams that allow picture sampling.")
+                        .font(WatchDesign.detail).foregroundStyle(WatchDesign.muted)
                     NavigationLink { HostSettingsPage() } label: {
                         HStack {Label("Library connection",systemImage:"network");Spacer();Image(systemName:"chevron.right")}.font(WatchDesign.body).frame(maxWidth:.infinity)
                     }.buttonStyle(WatchActionButtonStyle()).focusEffectDisabled().padding(.top,12)
                 }.frame(maxWidth:1160).padding(.horizontal,WatchDesign.inset).padding(.top,38).padding(.bottom,72).frame(maxWidth:.infinity)
             }.background(WatchDesign.canvas)
+            .fullScreenCover(isPresented:$library.showLightCalibration) {SceneLightingCalibration(api:library.api)}
             .task {
                 var accounts=Set<SettingsProvider>()
                 if (try? await ITVAccountService.shared.isSignedIn()) == true {accounts.insert(.itv)}

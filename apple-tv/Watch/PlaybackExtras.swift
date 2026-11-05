@@ -37,14 +37,16 @@ struct EpisodeCompletionGate {
     }
 }
 
-// Explicit, source-matched credits markers only. A chapter title or an assumed
-// final-N-seconds heuristic is never evidence that credits have started.
+// Verified credits retain their source timing. The near-end fallback is explicitly
+// labelled separately and never used as a skip/credits marker.
 struct CreditsCueState {
     private var offered=Set<String>()
     mutating func reset() {offered=[]}
     mutating func offer(markers:[PlaybackInterval],position:Double,duration:Double,playing:Bool,hasNext:Bool,blocked:Bool)->PlaybackInterval? {
         guard playing,hasNext,!blocked,offered.isEmpty else {return nil}
-        guard let marker=markers.first(where:{["credits","end_credits"].contains($0.kind) && $0.valid(duration:duration) && $0.contains(position) && !offered.contains($0.id)}) else {return nil}
+        let verified=markers.filter {["credits","end_credits"].contains($0.kind) && $0.valid(duration:duration)}
+        let fallback=PlaybackInterval(id:"near-end",title:"Up next",kind:"near_end",start:max(0,duration-10),end:duration)
+        guard let marker=verified.first(where:{$0.contains(position)}) ?? (verified.isEmpty && duration>10 && fallback.contains(position) ? fallback : nil) else {return nil}
         offered.insert(marker.id);return marker
     }
 }

@@ -46,6 +46,15 @@ import Foundation
   credits.reset()
   precondition(credits.offer(markers:[cue],position:120,duration:120,playing:true,hasNext:true,blocked:false)==nil)
   precondition(credits.offer(markers:[cue],position:105,duration:120,playing:true,hasNext:true,blocked:false)==cue)
+  credits.reset()
+  precondition(credits.offer(markers:[],position:109.9,duration:120,playing:true,hasNext:true,blocked:false)==nil)
+  let fallback=credits.offer(markers:[],position:110,duration:120,playing:true,hasNext:true,blocked:false)
+  precondition(fallback?.kind=="near_end" && fallback?.start==110)
+  precondition(credits.offer(markers:[],position:111,duration:120,playing:true,hasNext:true,blocked:false)==nil)
+  credits.reset()
+  precondition(credits.offer(markers:[],position:120,duration:120,playing:true,hasNext:true,blocked:false)==nil)
+  precondition(credits.offer(markers:[],position:115,duration:120,playing:false,hasNext:true,blocked:false)==nil)
+  precondition(credits.offer(markers:[],position:115,duration:120,playing:true,hasNext:true,blocked:true)==nil)
   print("Playback extras checks passed: timing/source/version validation, stale metadata, completion guards, duplicate ends, expired/final queue entries, DTO decoding and credits-cue guards")
  }
 }

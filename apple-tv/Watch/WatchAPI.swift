@@ -114,6 +114,18 @@ enum PairingStore {
     func progress(ticket: String, position: Double, completed: Bool = false, state: String? = nil, metrics:[String:Double] = [:]) async {
         let _: Empty? = try? await request("/session/\(ticket)", method: "POST", body: ["position": max(0, position.isFinite ? position : 0), "completed": completed, "state": state ?? "unknown", "metrics":metrics])
     }
+    func previewSceneCalibration(hue:Double)async throws {
+        let _:Empty=try await request("/scene-light/calibration",method:"POST",body:["hue":hue])
+    }
+    func endSceneCalibration()async {
+        let _:Empty?=try? await request("/scene-light/calibration",method:"DELETE")
+    }
+    func sceneColour(ticket:String,colour:SceneColour)async {
+        let _:Empty?=try? await request("/scene-light",method:"POST",body:["ticket":ticket,"hue":colour.hue,"white":colour.saturation==0])
+    }
+    func stopSceneLighting(ticket:String)async {
+        let _:Empty?=try? await request("/scene-light",method:"DELETE",body:["ticket":ticket])
+    }
     func release(ticket: String) async { let _: Empty? = try? await request("/session/\(ticket)", method: "DELETE") }
 }
 struct Empty: Decodable {}
