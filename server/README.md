@@ -28,3 +28,11 @@ Install the component requirements before running the remaining backend suites. 
 ## Optional Watch scene lighting
 
 The Apple TV gateway accepts `scene_light_entity` in its private settings file (default `null`). Set it to a colour-capable Home Assistant `light.*` entity, then enable Scene lighting in Watch Settings. The installed example target is `light.living_room_behind_tv`. The existing bridge Home Assistant credential stays server-side. Paired `/scene-light` updates require ownership of an active playback ticket and accept hue plus a neutral/white flag; callers cannot select arbitrary entities or brightness. Session cleanup and abandoned-lease expiry restore the captured lamp state; manual overrides take priority. See [Apple TV notes](../apple-tv/README.md) for sampling availability and validation limits.
+
+The Apple TV gateway now decorates catalogue responses with separately matched
+TMDB portrait posters and backdrops. `watch-appletv/catalogue_artwork.py` uses the
+existing private TMDB credential, caches results in the private installation and
+runs lookups outside the request/playback path. Poster URLs contain no credentials.
+Library reads enqueue work; the normal metadata background task processes bounded
+batches. Film and TV matches are cached separately. Missing artwork does not block
+browsing or playback. Deploy this module alongside the gateway's `server.py`.

@@ -342,3 +342,50 @@ to the library; the image does not create a tall empty header.
 
 Build 37 sets AVKit's playback-bar title to the episode title only. The show name
 remains in the separate logo area instead of being repeated in the transport.
+
+### Cinematic browsing (build 49)
+
+The `feature/cinematic-browse` branch adds a native collapsible sidebar on tvOS 18+
+(with the previous tab navigation retained on tvOS 17), including Favourites.
+Home highlights page horizontally with the remote and dot indicators. The hero
+occupies about 64% of the measured page height, leaving Continue Watching visible.
+Text uses a local scrim; the rest of the hero image stays bright. Show selections
+open the series detail page, with the same hero treatment and the existing series
+selector, episode playback, favourites and related programmes.
+
+Continue Watching uses landscape episode artwork, a left-aligned show identity in
+a shared vertical band, compact season/episode/runtime text, a progress line and
+provider branding at bottom right. The identity has explicit aspect-preserving
+size bounds and a soft elliptical readability fade. Later unplayed numbered
+episodes can receive New episode badges; unknown specials are not guessed.
+
+Home show recommendations exclude films; film continuation is on Films. Favourites
+has distinct show and film shelves. Every shelf uses one shape: matched portrait
+posters (including larger showcase posters) or a separate landscape fallback row.
+Portrait artwork is fitted intact and never synthesized by cropping landscape art.
+Finished posters retain their own title design. Landscape artwork uses serial,
+off-main text recognition to suppress an extra logo when its title is already
+present; detection is conservative but cannot guarantee every stylised font.
+
+`catalogue_artwork.py` resolves portrait and backdrop artwork through the existing
+host-only TMDB connection. It reuses conservative title/type matches and existing
+clear logos, keeps film and television cache records separate, validates public
+image paths, and performs bounded background metadata work. Catalogue reads do
+not perform network lookups or prepare playback. New artwork appears on the next
+library refresh; unmatched titles remain landscape. No client credentials or
+new provider sign-ins are required.
+
+The original deployed build 37 remains at Git tag `checkpoint-appletv-build-37`
+on GitHub. Build that tag in a separate checkout to restore the previous interface;
+this feature branch does not replace the checkpoint or change playback formats.
+
+Builds 46–49 keep one stable focus target for the hero carousel; only inert image
+layers slide, avoiding competition between horizontal scroll position and remote
+focus. Adjacent hero photos are warmed independently of playback preparation.
+Up from every card in the first shelf explicitly returns focus to the hero and
+scrolls it to the top. Hero readability uses a broad elliptical fade rather than
+a gradient bounded by the copy's rectangle. Personal shelves use watch/favourite
+dates and recommendation order instead of alphabetic ties. Ambiguous editions
+(such as QI XL, bleeped Taskmaster and regional/special versions) have edition
+badges. The carousel's on-device navigation improvement was viewer-confirmed;
+the final return-to-hero and edition changes still require remote verification.

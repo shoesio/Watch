@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 struct Library: Decodable { let programmes: [Programme] }
 struct Brand: Decodable, Identifiable { let id: String; let name: String; let image: String }
@@ -10,6 +11,8 @@ struct Programme: Decodable, Identifiable {
     let description: String?
     let artwork: String?
     let hero: String?
+    let poster:String?
+    let cardArtwork:String?
     let showLogo: String?
     let channelLogo: String?
     let live: Bool
@@ -18,6 +21,7 @@ struct Programme: Decodable, Identifiable {
     let filmRank:Int?
     let recent: Bool
     let favourite: Bool
+    let favouriteAt:Double?
     let genres: [String]
     let brands: [Brand]
     let episodes: [Episode]
@@ -27,6 +31,42 @@ struct Programme: Decodable, Identifiable {
     let contentRating:String?
     let ratingSource:String?
     let guide: Guide?
+    var editionLabel:String? {
+        let name=title.lowercased()
+        if name == "qi xl" {return "QI XL · Extended"}
+        if name.contains("bleeped") {return "Bleeped"}
+        if name.contains("a bit more news") {return "Extended edition"}
+        if name.contains("taskmaster") {
+            if name.contains("new zealand") {return "New Zealand"}
+            if name.contains("australia") {return "Australia"}
+            if name.contains("champion of champions") {return "Champion of Champions"}
+            if name.contains("new year") {return "New Year Treat"}
+            if name.contains("junior") {return "Junior Taskmaster"}
+        }
+        return nil
+    }
+    // Discovery previews can reuse a clear logo already cached for the same
+    // title without waiting for the programme to be imported into the library.
+    var logoSource:String? {
+        if let showLogo,!showLogo.isEmpty {return showLogo}
+        guard !live,let brand=brands.first,let url=URL(string:brand.image),
+              ["http","https"].contains(url.scheme),url.path.contains("/static/artwork/brands/"),
+              var parts=URLComponents(url:url,resolvingAgainstBaseURL:false) else {return nil}
+        let key=title.lowercased().replacingOccurrences(of:"’",with:"'").replacingOccurrences(of:"[^\\w]+",with:" ",options:.regularExpression).trimmingCharacters(in:.whitespacesAndNewlines)
+        let hash=SHA256.hash(data:Data(key.utf8)).map{String(format:"%02x",$0)}.joined().prefix(20)
+        parts.path="/static/show-logos/\(hash).png";parts.query=nil;parts.fragment=nil
+        return parts.url?.absoluteString
+    }
+    // A new-episode badge needs an explicitly later numbered edition than the
+    // last watched episode. Unknown seasons/specials are never guessed as new.
+    var hasNewEpisode:Bool {
+        guard !film,!live,let watched=episodes.filter({($0.updatedAt ?? 0)>0}).max(by:{($0.updatedAt ?? 0)<($1.updatedAt ?? 0)}),
+              let oldSeason=watched.seasonNumber,let oldNumber=watched.episodeNumber else {return false}
+        return episodes.contains {episode in
+            guard (episode.updatedAt ?? 0)==0,(episode.resumeSeconds ?? 0)==0,let season=episode.seasonNumber,let number=episode.episodeNumber else {return false}
+            return season>oldSeason || (season==oldSeason && number>oldNumber)
+        }
+    }
     var resume: Episode? { episodes.first { $0.id == resumeEpisode } }
     var preferred: Episode? { resume ?? episodes.first }
     var latestProgress: Double { episodes.map { $0.updatedAt ?? 0 }.max() ?? 0 }
@@ -46,6 +86,11 @@ struct Episode: Decodable, Identifiable {
     let quality: String?
     let uhdAvailable:Bool?
     let brands: [Brand]
+    var seasonNumber:Int? {
+        guard let value=season?.trimmingCharacters(in:.whitespacesAndNewlines),
+              let range=value.range(of:"^(?:(?:series|season|s)\\s*)?[0-9]+$",options:[.regularExpression,.caseInsensitive]) else {return nil}
+        return Int(value[range].filter(\.isNumber))
+    }
     var seasonTitle: String {
         guard let season, !season.isEmpty else { return "Episodes" }
         return Int(season) != nil ? "Series \(season)" : season
@@ -146,4 +191,21 @@ struct ShowsResponse:Decodable {
     let genres:[String]?
     let nextCursor:String?
     let total:Int?
+}
+
+// Preserve editorial order on ties rather than silently using the title. This
+// also gives favourites without watch history their actual favourite date.
+enum BrowseOrdering {
+    static func personal(_ programmes:[Programme],recommended:[Programme])->[Programme] {
+        let ranks=Dictionary(recommended.enumerated().map{($0.element.id,$0.offset)},uniquingKeysWith:min)
+        return programmes.enumerated().sorted {left,right in
+            let a=left.element,b=right.element
+            let aDate=max(a.latestProgress,a.favouriteAt ?? 0),bDate=max(b.latestProgress,b.favouriteAt ?? 0)
+            if aDate != bDate {return aDate>bDate}
+            if a.recent != b.recent {return a.recent}
+            if a.favourite != b.favourite {return a.favourite}
+            let ar=ranks[a.id] ?? Int.max,br=ranks[b.id] ?? Int.max
+            return ar != br ? ar<br : left.offset<right.offset
+        }.map(\.element)
+    }
 }

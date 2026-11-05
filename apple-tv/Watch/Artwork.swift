@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO
+import Vision
 
 // A single television layout scale, shared by every catalogue and detail screen.
 enum WatchDesign {
@@ -23,9 +24,11 @@ enum WatchDesign {
         Array(repeating:GridItem(.fixed(cardWidth(width)),spacing:gap,alignment:.topLeading),count:columns(width))
     }
 }
+private struct CinemaHeroHeightKey:EnvironmentKey {static let defaultValue:CGFloat=820}
 private struct CardWidthKey:EnvironmentKey { static let defaultValue:CGFloat=409 }
 private struct CardColumnsKey:EnvironmentKey { static let defaultValue=4 }
 extension EnvironmentValues {
+    var cinemaHeroHeight:CGFloat {get {self[CinemaHeroHeightKey.self]} set {self[CinemaHeroHeightKey.self]=newValue}}
     var watchCardWidth:CGFloat { get { self[CardWidthKey.self] } set { self[CardWidthKey.self]=newValue } }
     var watchColumns:Int { get { self[CardColumnsKey.self] } set { self[CardColumnsKey.self]=newValue } }
 }
@@ -39,6 +42,7 @@ struct WatchContentViewport<Content:View>:View {
         GeometryReader {proxy in
             content(proxy.size.width)
                 .frame(width:proxy.size.width,height:proxy.size.height,alignment:.topLeading)
+                .environment(\.cinemaHeroHeight,max(460,proxy.size.height*0.64))
                 .environment(\.watchCardWidth,WatchDesign.cardWidth(proxy.size.width))
                 .environment(\.watchColumns,WatchDesign.columns(proxy.size.width))
         }
@@ -76,6 +80,7 @@ private actor ArtworkCache {
     static let shared=ArtworkCache()
     private let cache=NSCache<NSString,UIImage>()
     private var pending:[String:Task<UIImage?,Never>]=[:]
+    private var titleChecks:[String:Bool]=[:]
     private let session:URLSession
     init() {
         cache.totalCostLimit=70*1024*1024
@@ -83,6 +88,14 @@ private actor ArtworkCache {
         config.urlCache=URLCache(memoryCapacity:12*1024*1024,diskCapacity:100*1024*1024)
         config.timeoutIntervalForRequest=20
         session=URLSession(configuration:config)
+    }
+    func containsTitle(_ source:String,title:String) async -> Bool {
+        let key=source+"#title#"+title
+        if let value=titleChecks[key] {return value}
+        guard let bitmap=await image(source,maxPixel:800)?.cgImage else {return true}
+        let result=await ArtworkTitleAnalysis.shared.containsTitle(bitmap,title:title)
+        if titleChecks.count>1000 {titleChecks.removeAll()}
+        titleChecks[key]=result;return result
     }
     func image(_ source:String,maxPixel:Int) async -> UIImage? {
         let key=source+"#\(maxPixel)"
@@ -105,7 +118,53 @@ private actor ArtworkCache {
         return image
     }
 }
+// Serial, off-main analysis avoids stamping a second wordmark on provider
+// artwork. A failed image/read keeps the finished artwork intact.
+private actor ArtworkTitleAnalysis {
+    static let shared=ArtworkTitleAnalysis()
+    func containsTitle(_ image:CGImage,title:String)->Bool {
+        let request=VNRecognizeTextRequest();request.recognitionLevel = .accurate;request.usesLanguageCorrection=false
+        do {
+            try VNImageRequestHandler(cgImage:image,options:[:]).perform([request])
+            let text=(request.results ?? []).compactMap{$0.topCandidates(1).first?.string}.joined(separator:" ")
+            func words(_ value:String)->Set<String> {
+                Set(value.folding(options:[.diacriticInsensitive,.caseInsensitive],locale:Locale(identifier:"en_GB")).components(separatedBy:CharacterSet.alphanumerics.inverted).filter{!$0.isEmpty})
+            }
+            let stop:Set<String>=["the","a","an","and","of","for","with","on","to","is","at","or","bbc","bleeped"]
+            let expected=words(title).subtracting(stop);let actual=words(text)
+            guard !expected.isEmpty else {return !text.isEmpty}
+            let hits=expected.intersection(actual).count
+            return hits>=max(1,Int(ceil(Double(expected.count)*0.5)))
+        } catch {return true}
+    }
+}
+
+private struct ContinueWatchingIdentity:View {
+    let programme:Programme
+    let width:CGFloat
+    @State private var logo:UIImage?
+    var body:some View {
+        Group {
+            if let logo {
+                let scale=min(width/max(1,logo.size.width),56/max(1,logo.size.height))
+                Image(uiImage:logo).resizable().interpolation(.high)
+                    .frame(width:logo.size.width*scale,height:logo.size.height*scale)
+            } else {
+                Text(programme.title).font(.system(size:22,weight:.semibold)).lineLimit(2)
+            }
+        }.frame(width:width,height:72,alignment:.leading)
+            .shadow(color:.black.opacity(0.65),radius:2,y:1)
+            .task(id:programme.logoSource) {
+                logo=nil
+                if let source=programme.logoSource {logo=await ArtworkCache.shared.image(source,maxPixel:700)}
+            }
+    }
+}
+
 struct Artwork: View {
+    static func prefetch(_ source:String?,maxPixel:Int)async {
+        if let source {_ = await ArtworkCache.shared.image(source,maxPixel:maxPixel)}
+    }
     let source:String?
     var fit=false
     var maxPixel=900
@@ -130,6 +189,42 @@ struct Artwork: View {
         }
     }
 }
+// The focused action remains in Hero. These two inert image layers animate
+// independently of tvOS's focus engine and keep the old photo during a fetch.
+struct HeroSlideArtwork:View {
+    let source:String?
+    var direction=1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var image:UIImage?
+    @State private var outgoing:UIImage?
+    @State private var incomingOffset:CGFloat=0
+    @State private var outgoingOffset:CGFloat=0
+    var body:some View {
+        GeometryReader {proxy in
+            ZStack {
+                Color.black
+                if let outgoing {photo(outgoing,size:proxy.size).offset(x:outgoingOffset)}
+                if let image {photo(image,size:proxy.size).offset(x:incomingOffset)}
+            }.frame(width:proxy.size.width,height:proxy.size.height).clipped()
+                .task(id:source) {
+                    guard let source else {image=nil;outgoing=nil;return}
+                    guard let loaded=await ArtworkCache.shared.image(source,maxPixel:2400),!Task.isCancelled else {return}
+                    guard image != nil,!reduceMotion else {image=loaded;outgoing=nil;incomingOffset=0;return}
+                    let width=proxy.size.width*CGFloat(direction)
+                    outgoing=image;outgoingOffset=0;incomingOffset=width;image=loaded
+                    do {try await Task.sleep(for:.milliseconds(20))} catch {return}
+                    withAnimation(.easeInOut(duration:0.44)) {incomingOffset=0;outgoingOffset = -width}
+                    do {try await Task.sleep(for:.milliseconds(460))} catch {return}
+                    outgoing=nil
+                }
+        }.allowsHitTesting(false).accessibilityHidden(true)
+    }
+    private func photo(_ image:UIImage,size:CGSize)->some View {
+        Image(uiImage:image).resizable().aspectRatio(contentMode:.fill)
+            .frame(width:size.width,height:size.height).clipped()
+    }
+}
+
 struct Brands:View {
     let items:[Brand]
     var body:some View {
@@ -151,6 +246,8 @@ struct CardBrands:View {
 struct ProgrammeTitle:View {
     let programme:Programme
     var large=true
+    var titleFont:Font?=nil
+    var titleLineLimit:Int?=nil
     var centered=false
     var width:CGFloat=520
     var height:CGFloat=100
@@ -178,7 +275,7 @@ struct ProgrammeTitle:View {
             } else {
                 VStack(alignment:centered ? .center : .leading,spacing:12) {
                     if hasEyebrow { eyebrow }
-                    Text(programme.title).font(.system(size:large ? 46 : 36,weight:.bold))
+                    Text(programme.title).font(titleFont ?? .system(size:large ? 46 : 36,weight:.bold)).lineLimit(titleLineLimit)
                         .multilineTextAlignment(centered ? .center : .leading)
                         .fixedSize(horizontal:false,vertical:true)
                 }
@@ -187,9 +284,9 @@ struct ProgrammeTitle:View {
             }
         }
             .accessibilityLabel(programme.title)
-            .task(id:programme.showLogo) {
+            .task(id:programme.logoSource) {
                 logo=nil
-                guard let source=programme.showLogo else {return}
+                guard let source=programme.logoSource else {return}
                 let loaded=await ArtworkCache.shared.image(source,maxPixel:1400)
                 guard !Task.isCancelled else {return}
                 withAnimation(reduceMotion ? nil : .easeOut(duration:0.18)) {logo=loaded}
@@ -292,21 +389,21 @@ struct EpisodeTile:View {
     let episode:Episode
     let programme:Programme
     @Environment(\.watchCardWidth) private var width
-    private var imageWidth:CGFloat { width-WatchDesign.cardInset*2 }
     var body:some View {
-        CardSurface {
-            VStack(alignment:.leading,spacing:12) {
-                Artwork(source:episode.thumbnail ?? programme.artwork).frame(width:imageWidth,height:imageWidth*9/16)
-                    .overlay(alignment:.topLeading) { if !episode.brands.isEmpty { CardBrands(items:episode.brands).padding(12) } }
-                    .clipShape(RoundedRectangle(cornerRadius:12))
+        VStack(alignment:.leading,spacing:12) {
+            Artwork(source:episode.thumbnail ?? programme.artwork).frame(width:width,height:width*9/16)
+                .overlay(alignment:.bottomTrailing) {if !episode.brands.isEmpty {CardBrands(items:episode.brands).padding(12)}}
+                .clipShape(RoundedRectangle(cornerRadius:WatchDesign.radius))
+            VStack(alignment:.leading,spacing:10) {
                 Text(episode.title).font(WatchDesign.title).lineLimit(2).frame(height:58,alignment:.topLeading)
-                Text(episode.compactCaption).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(1).frame(height:25,alignment:.leading)
+                Text(episode.compactCaption).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(1)
                 Text(episode.description ?? "").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(2).frame(height:50,alignment:.topLeading)
-                ProgressView(value:min(1,(episode.progress ?? 0)/100)).tint(.white).opacity((episode.resumeSeconds ?? 0)>0 ? 1 : 0).frame(height:5)
-            }
-        }.accessibilityElement(children:.combine)
+                ProgressView(value:min(1,(episode.progress ?? 0)/100)).tint(.white).opacity((episode.resumeSeconds ?? 0)>0 ? 1 : 0).frame(height:4)
+            }.padding(.horizontal,6)
+        }.frame(width:width,alignment:.topLeading).accessibilityElement(children:.combine)
     }
 }
+
 struct SectionHeading:View {
     let title:String
     var subtitle:String?=nil
@@ -393,5 +490,80 @@ struct WarmupScreen:View {
             }.padding(.horizontal,88).padding(.bottom,82)
                 .frame(maxWidth:.infinity).allowsHitTesting(false)
         }.frame(maxWidth:.infinity,maxHeight:.infinity).accessibilityElement(children:.combine)
+    }
+}
+
+// Shelf dimensions share the same artwork, focus treatment and baseline. Only
+// editorial prominence changes; no recommendation ordering is invented here.
+enum BrowseCardStyle {case standard,continuing,landscape,portrait,showcase}
+struct CinematicProgrammeCard:View {
+    let programme:Programme
+    var style:BrowseCardStyle = .portrait
+    var shelf=false
+    @Environment(\.watchCardWidth) private var availableWidth
+    @State private var artworkHasTitle=true
+    private var editorial:Bool {style == .portrait || style == .showcase || style == .landscape}
+    private var portrait:Bool {(style == .portrait || style == .showcase) && programme.poster?.isEmpty == false}
+    private var width:CGFloat {shelf ? (style == .showcase ? 480 : portrait ? 310 : 440) : availableWidth}
+    private var height:CGFloat {portrait ? width*1.5 : width*9/16}
+    private var episode:Episode? {programme.resume ?? programme.preferred}
+    private var source:String? {portrait ? programme.poster : (editorial ? programme.cardArtwork ?? programme.hero ?? programme.artwork : episode?.thumbnail ?? programme.artwork)}
+    private var caption:String {
+        guard let episode else {return ""}
+        var parts:[String]=[]
+        if !programme.film {
+            if let season=episode.seasonNumber {parts.append("S\(season)")}
+            if let number=episode.episodeNumber,number>0 {parts.append("E\(number)")}
+        }
+        let identity=parts.joined(separator:", ")
+        return [identity,episode.durationSeconds.flatMap {$0>0 ? "\(Int(($0/60).rounded()))m" : nil} ?? ""].filter{!$0.isEmpty}.joined(separator:" • ")
+    }
+    var body:some View {
+        ZStack(alignment:.bottomLeading) {
+            Artwork(source:source,fit:portrait,maxPixel:style == .showcase ? 1400 : 900)
+                .frame(width:width,height:height)
+            if !portrait {LinearGradient(colors:[.clear,.black.opacity(0.82)],startPoint:.center,endPoint:.bottom)}
+            // A finished portrait poster already contains its title treatment.
+            // Keep it intact instead of stamping a second logo over the first.
+            if editorial && !portrait && !artworkHasTitle {
+                VStack(spacing:12) {
+                    ProgrammeTitle(programme:programme,large:false,titleFont:.system(size:style == .showcase ? 34 : 27,weight:.bold),titleLineLimit:3,centered:true,width:width-44,height:70,maxLogoHeight:portrait ? (style == .showcase ? 155 : 115) : 85,reserveHeadroom:portrait)
+                }.padding(22).frame(width:width,alignment:.bottom)
+            } else if !editorial && !portrait {
+                HStack(alignment:.bottom,spacing:12) {
+                    Text(caption.isEmpty ? programme.title : caption)
+                        .font(.system(size:21,weight:.medium)).lineLimit(1)
+                    Spacer(minLength:0)
+                    Brands(items:episode?.brands.isEmpty == false ? episode!.brands : programme.brands)
+                }.padding(.horizontal,22).padding(.bottom,22)
+                if let episode,(episode.resumeSeconds ?? 0)>0 {
+                    GeometryReader {proxy in
+                        Capsule().fill(.white.opacity(0.3))
+                            .overlay(alignment:.leading) {Capsule().fill(.white).frame(width:proxy.size.width*min(1,max(0,(episode.progress ?? ((episode.resumeSeconds ?? 0)/max(1,episode.durationSeconds ?? 1)*100))/100)))}
+                    }.frame(height:4).padding(.horizontal,22).padding(.bottom,9)
+                }
+            }
+            if style == .continuing {
+                ZStack(alignment:.topLeading) {
+                    EllipticalGradient(stops:[.init(color:.black.opacity(0.56),location:0),.init(color:.black.opacity(0.3),location:0.45),.init(color:.clear,location:1)],center:UnitPoint(x:0.18,y:0.22),startRadiusFraction:0,endRadiusFraction:0.85)
+                        .frame(width:width,height:height)
+                    ContinueWatchingIdentity(programme:programme,width:min(220,width*0.53))
+                        .padding(.top,28).padding(.leading,22)
+                }.frame(width:width,height:height,alignment:.topLeading)
+            }
+            if editorial,let edition=programme.editionLabel {
+                VStack {Spacer();HStack {Text(edition).font(.system(size:17,weight:.semibold)).padding(.horizontal,12).padding(.vertical,7).background(.black.opacity(0.78),in:Capsule());Spacer()}}
+                    .padding(.horizontal,16).padding(.bottom,16)
+            }
+            if programme.hasNewEpisode {
+                VStack {HStack {if style == .continuing {Spacer()};Text("New episode").font(.system(size:17,weight:.semibold)).foregroundStyle(.black).padding(.horizontal,12).padding(.vertical,7).background(.white,in:RoundedRectangle(cornerRadius:6));if style != .continuing {Spacer()}};Spacer()}.padding(16)
+            }
+        }.frame(width:width,height:height).clipShape(RoundedRectangle(cornerRadius:WatchDesign.radius))
+            .task(id:(source ?? "")+programme.title) {
+                artworkHasTitle=true
+                if editorial,!portrait,let source {artworkHasTitle=await ArtworkCache.shared.containsTitle(source,title:programme.title)}
+            }
+            .accessibilityElement(children:.ignore)
+            .accessibilityLabel([programme.title,portrait ? nil : episode?.title,portrait ? nil : caption,programme.hasNewEpisode ? "New episode" : nil].compactMap{$0}.joined(separator:", "))
     }
 }

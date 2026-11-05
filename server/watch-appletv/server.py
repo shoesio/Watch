@@ -19,6 +19,8 @@ class Gateway:
         from scene_light import SceneLight
         config=getattr(bridge,'config',{})
         self.scene_light=SceneLight(settings.get('scene_light_entity'),config.get('ha_url',''),getattr(bridge,'token',''))
+        from catalogue_artwork import CatalogueArtwork
+        self.catalogue_artwork=CatalogueArtwork(self.root.parent,config.get("public_base",""))
         self.preparing = asyncio.Lock()
         from playback_features import PlaybackFeatures
         self.features=PlaybackFeatures(self.root)
@@ -343,6 +345,7 @@ class Gateway:
                     from tmdb_logos import sync
                     await asyncio.to_thread(sync,self.root.parent,imported)
                 await asyncio.to_thread(self.ratings.refresh,self.project())
+                await asyncio.to_thread(self.catalogue_artwork.refresh)
             except Exception:pass
             await asyncio.sleep(120)
 
@@ -569,7 +572,11 @@ class Gateway:
                 if not ipaddress.ip_address(request.remote).is_private: raise web.HTTPForbidden()
                 if request.path not in ('/pair','/health') and not request.path.startswith('/stream/') and not self.paired(request):
                     return web.json_response({'error':'Pair this Apple TV to continue.'}, status=401)
-                return await handler(request)
+                response=await handler(request)
+                if request.path in ('/library','/discover','/shows','/related','/search','/discover/import') and isinstance(response,web.Response) and response.status==200 and response.content_type=='application/json':
+                    payload=json.loads(response.body)
+                    response.body=json.dumps(self.catalogue_artwork.enrich(payload)).encode()
+                return response
             except (ValueError, TypeError): return web.json_response({'error':'Invalid request.'}, status=400)
         app = web.Application(middlewares=[auth], client_max_size=4096)
         app.router.add_post('/scene-light/calibration',self.scene_calibration_api)

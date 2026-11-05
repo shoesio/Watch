@@ -32,7 +32,7 @@ import AVFoundation
     }
 }
 
-enum AppTab:String { case home,shows,films,live,search,settings }
+enum AppTab:String { case home,shows,films,live,search,favourites,settings }
 
 @MainActor final class LibraryStore: ObservableObject {
     let api = WatchAPI()
@@ -125,13 +125,14 @@ struct RootView:View {
             Group {
                 if library.connected {
                     TabView(selection:$library.tab) {
-                        BrowseView(section:.home).tabItem { Label("For you",systemImage:"house") }.tag(AppTab.home)
+                        SearchView().tabItem {Label("Search",systemImage:"magnifyingglass")}.tag(AppTab.search)
+                        BrowseView(section:.home).tabItem { Label("Home",systemImage:"house") }.tag(AppTab.home)
                         BrowseView(section:.shows).tabItem { Label { Text("Shows") } icon: { Image(systemName:"rectangle.stack").renderingMode(.template).symbolRenderingMode(.monochrome) } }.tag(AppTab.shows)
                         BrowseView(section:.films).tabItem { Label("Films",systemImage:"film") }.tag(AppTab.films)
                         BrowseView(section:.live).tabItem { Label("Live TV",systemImage:"dot.radiowaves.left.and.right") }.tag(AppTab.live)
-                        SearchView().tabItem { Label("Search",systemImage:"magnifyingglass") }.tag(AppTab.search)
+                        BrowseView(section:.favourites).tabItem {Label("Favourites",systemImage:"heart")}.tag(AppTab.favourites)
                         SettingsView().tabItem { Label("Settings",systemImage:"gearshape") }.tag(AppTab.settings)
-                    }
+                    }.modifier(WatchSidebarStyle())
                 } else { PairView() }
             }
             .environment(\.watchCardWidth,WatchDesign.cardWidth(geometry.size.width))
@@ -287,5 +288,14 @@ private struct HostSettingsPage:View {
                 Text("This product uses the TMDB API but is not endorsed or certified by TMDB.").font(.system(size:17)).foregroundStyle(WatchDesign.muted)
             }.frame(maxWidth:1080,alignment:.leading).padding(WatchDesign.inset).frame(maxWidth:.infinity)
         }.background(WatchDesign.canvas)
+    }
+}
+
+// Use tvOS's own sidebar focus and expansion behaviour rather than reproducing
+// it with a second remote handler. Older supported devices keep their tab bar.
+private struct WatchSidebarStyle:ViewModifier {
+    func body(content:Content)->some View {
+        if #available(tvOS 18.0,*) {content.tabViewStyle(.sidebarAdaptable)}
+        else {content}
     }
 }
