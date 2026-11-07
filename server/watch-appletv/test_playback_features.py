@@ -19,6 +19,16 @@ class Metadata(unittest.TestCase):
   self.assertEqual([e['id'] for e in series_after(library(),'s1e1')],['s1e2','s2e1'])
   self.assertEqual(series_after(library(),'special'),[])
   self.assertEqual(series_after(library(),'s2e1'),[])
+ def test_qi_lettered_seasons_keep_episode_order_and_cross_to_next_series(self):
+  rows=[{'id':'qi','title':'QI','episodes':[
+   {'id':'x1','season':'Series X','episode_number':1},
+   {'id':'w4','season':'Series W','episode_number':4},
+   {'id':'w3','season':'Series W','episode_number':3},
+   {'id':'special','season':'Christmas Specials','episode_number':1}]}]
+  self.assertEqual([e['id'] for e in series_after(rows,'w3')],['w4','x1'])
+  self.assertEqual(series_after(rows,'special'),[])
+  rows[0]['episodes'][1]['season']='W'
+  self.assertEqual([e['id'] for e in series_after(rows,'w3')],['w4','x1'])
  def test_films_live_and_unknown_do_not_queue(self):
   for field in ['film','live']:
    rows=library();rows[0][field]=True;self.assertEqual(series_after(rows,'s1e1'),[])

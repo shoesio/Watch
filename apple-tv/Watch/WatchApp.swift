@@ -43,6 +43,14 @@ enum AppTab:String { case home,shows,films,live,search,favourites,settings }
     @Published var lastUpdated: Date?
     @Published var deepPlay: PlaybackSelection?
     @Published var tab:AppTab = .home
+    @Published var sectionRoots:[AppTab:UUID]=[:]
+    func selectSection(_ section:AppTab) {
+        // Every explicit sidebar selection is a fresh visit, including reselecting
+        // the current section while its navigation stack contains a show.
+        sectionRoots[section]=UUID()
+        tab=section
+    }
+
     @Published var showLightCalibration=false
     @Published var searchQuery=""
     @Published var routeProgrammeID:String?
@@ -124,14 +132,14 @@ struct RootView:View {
         GeometryReader { geometry in
             Group {
                 if library.connected {
-                    TabView(selection:$library.tab) {
-                        SearchView().tabItem {Label("Search",systemImage:"magnifyingglass")}.tag(AppTab.search)
-                        BrowseView(section:.home).tabItem { Label("Home",systemImage:"house") }.tag(AppTab.home)
-                        BrowseView(section:.shows).tabItem { Label { Text("Shows") } icon: { Image(systemName:"rectangle.stack").renderingMode(.template).symbolRenderingMode(.monochrome) } }.tag(AppTab.shows)
-                        BrowseView(section:.films).tabItem { Label("Films",systemImage:"film") }.tag(AppTab.films)
-                        BrowseView(section:.live).tabItem { Label("Live TV",systemImage:"dot.radiowaves.left.and.right") }.tag(AppTab.live)
-                        BrowseView(section:.favourites).tabItem {Label("Favourites",systemImage:"heart")}.tag(AppTab.favourites)
-                        SettingsView().tabItem { Label("Settings",systemImage:"gearshape") }.tag(AppTab.settings)
+                    TabView(selection:Binding(get:{library.tab},set:{library.selectSection($0)})) {
+                        SearchView().id(library.sectionRoots[.search]).tabItem {Label("Search",systemImage:"magnifyingglass")}.tag(AppTab.search)
+                        BrowseView(section:.home).id(library.sectionRoots[.home]).tabItem { Label("Home",systemImage:"house") }.tag(AppTab.home)
+                        BrowseView(section:.shows).id(library.sectionRoots[.shows]).tabItem { Label { Text("Shows") } icon: { Image(systemName:"rectangle.stack").renderingMode(.template).symbolRenderingMode(.monochrome) } }.tag(AppTab.shows)
+                        BrowseView(section:.films).id(library.sectionRoots[.films]).tabItem { Label("Films",systemImage:"film") }.tag(AppTab.films)
+                        BrowseView(section:.live).id(library.sectionRoots[.live]).tabItem { Label("Live TV",systemImage:"dot.radiowaves.left.and.right") }.tag(AppTab.live)
+                        BrowseView(section:.favourites).id(library.sectionRoots[.favourites]).tabItem {Label("Favourites",systemImage:"heart")}.tag(AppTab.favourites)
+                        SettingsView().id(library.sectionRoots[.settings]).tabItem { Label("Settings",systemImage:"gearshape") }.tag(AppTab.settings)
                     }.modifier(WatchSidebarStyle())
                 } else { PairView() }
             }

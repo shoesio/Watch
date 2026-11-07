@@ -33,6 +33,33 @@ import Foundation
   defer {defaults.removePersistentDomain(forName:suite)}
   try! profile.save(defaults:defaults)
   precondition(HueCalibration.load(defaults:defaults)==profile,"Calibration round trips through preferences")
+  precondition(SceneColour.predominant(rgba:colour(0,0,0,100))!.brightness==0,"Black frames carry zero brightness")
+  precondition(SceneColour.predominant(rgba:colour(255,255,255,100))!.brightness==100,"White frames carry full brightness")
+  precondition(darkSea.brightness<40,"Dark scenes remain dark for brightness matching")
+  var options=SceneLightingOptions()
+  options.matchSaturation=true;options.matchBrightness=true;options.averagingWindow=5;options.fade=8;options.lookAhead=2;options.neutralWhite=false;options.saturation=60
+  options.save(defaults:defaults)
+  precondition(SceneLightingOptions.load(defaults:defaults)==options,"Lighting controls persist")
+  defaults.set(-100,forKey:"watch.light.sample")
+  precondition(SceneLightingOptions.load(defaults:defaults).sampleInterval==2,"Invalid intervals use a safe default")
+  var window=SceneColourWindow()
+  let blue=SceneColour(hue:220,saturation:90),green=SceneColour(hue:120,saturation:90),white=SceneColour(hue:0,saturation:0)
+  _=window.append(blue,at:0,options:options);_=window.append(blue,at:1,options:options)
+  precondition(SceneColour.distance(window.append(green,at:2,options:options)!.hue,220)<1,"A brief cut does not replace the dominant sample colour")
+  precondition(SceneColour.distance(window.append(green,at:8,options:options)!.hue,120)<1,"Old samples expire")
+  precondition(SceneColour.distance(window.append(white,at:9,options:options)!.hue,120)<1,"Neutral off retains the previous colour")
+  window.reset();options.neutralWhite=true
+  _=window.append(white,at:0,options:options);_=window.append(white,at:1,options:options)
+  precondition(window.append(blue,at:2,options:options)!.saturation==0,"Predominantly neutral window uses white")
+  window.reset();_=window.append(SceneColour(hue:359,saturation:90),at:0,options:options)
+  precondition(SceneColour.distance(window.append(SceneColour(hue:1,saturation:90),at:1,options:options)!.hue,0)<2,"Temporal hue wraps through red")
+  var clock=SceneLookAheadClock()
+  precondition(clock.lead(at:0,position:100,playing:true,target:2)==0,"Look ahead starts at zero")
+  precondition(clock.lead(at:4,position:104,playing:true,target:2)==1,"Look ahead ramps gradually")
+  precondition(clock.lead(at:8,position:108,playing:true,target:2)==2,"Look ahead reaches its target")
+  precondition(clock.lead(at:9,position:200,playing:true,target:2)==0,"Seeking restarts the ramp")
+  precondition(clock.lead(at:10,position:201,playing:false,target:2)==0,"Pause resets the ramp")
+  precondition(clock.lead(at:20,position:201,playing:true,target:2)==0,"Resume restarts at zero")
   print("Scene hue checks passed: dominant colour, neutral/black/white scenes, logo rejection, missing frames and circular smoothing")
  }
 }

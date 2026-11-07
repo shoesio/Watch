@@ -11,13 +11,16 @@ Watch brings a shared television library to Apple TV, Home Assistant and Samsung
 
 This repository groups the existing components without changing the running installation. The server folder preserves the installed directory names and imports. Component READMEs describe their existing configuration and operation; paths and network addresses in examples reflect the original Pi installation and should be adapted for another host.
 
-## Latest updates · 4 November 2026
+## Latest updates · 7 November 2026
 
-- Apple TV build 30: native BBC 2160p HLG playback, a wider UHD catalogue, Favourites/UHD collections, consistent playback controls, chapters, verified intro/recap skipping, Up next and optional cancellable autoplay.
-- Samsung 0.335: chapters, verified skip markers, Up next and cancellable autoplay, plus the paused-position fix. See [Samsung notes](samsung/README.md) for remote controls and remaining physical checks.
-- Pi host: shared playback-feature APIs and source/version validation, current BBC edition resolution, background UHD discovery, corrected ITV film classification/runtime parsing, and on-demand buffering/pause improvements.
+- Apple TV build 63: cinematic heroes and themed shelves, portrait artwork, daily discovery rows, exact Christmas episode links, sidebar navigation that returns to each section’s root, and a new artwork-led Up next card.
+- Playback: native controls, verified intro/recap skipping, automatic Up next, chronological QI lettered-series queues, and ahead-of-time credits analysis combining picture text with closing music. Autoplay waits for the episode to finish.
+- Scene lighting: live transport-menu controls for sample window, fade, saturation and brightness matching, neutral-to-white behaviour and optional look-ahead. Calibration and original lamp-state restoration are preserved.
+- Pi host: bounded, paired ending previews and analysis diagnostics, reviewed clear-logo matches, and the shared playback-feature APIs. Samsung and Home Assistant sources remain included alongside the host and tvOS app.
 
-BBC UHD uses the installation owner's privately provisioned setup; no client identity, private key or account session is included. See [validation and release notes](docs/RELEASE-2026-11-04.md), [Apple TV notes](apple-tv/README.md), and the [playback API contract](docs/PLAYBACK-FEATURES-API.md).
+See [build 63 release and validation notes](docs/RELEASE-2026-11-07.md), [credits detection](docs/VISUAL-CREDITS.md), [scene-lighting controls](docs/SCENE-LIGHTING-CONTROLS.md), [Apple TV notes](apple-tv/README.md), and the [playback API contract](docs/PLAYBACK-FEATURES-API.md).
+
+BBC UHD uses the installation owner's privately provisioned setup; no client identity, private key or account session is included. The previous build-37 checkpoint is retained as `checkpoint-appletv-build-37`.
 
 ## Screenshots
 

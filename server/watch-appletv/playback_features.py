@@ -42,12 +42,17 @@ def series_after(programmes,ident,limit=20):
     group=next((p for p in programmes if any(e['id']==ident for e in p.get('episodes',[]))),None)
     if not group or group.get('live') or group.get('film'):return []
     def order(e):
-        season=str(e.get('season',''))
+        season=str(e.get('season','')).strip()
+        # QI uses alphabetic series (Series W, Series X). Accept explicit
+        # single-letter seasons, without interpreting named specials as seasons.
+        letter=re.fullmatch(r'(?:Series\s+)?([A-Z])',season,re.IGNORECASE)
+        numeric=re.fullmatch(r'(?:Series\s+)?([0-9]+)',season,re.IGNORECASE)
+        season_number=ord(letter[1].upper())-ord('A')+1 if letter else int(numeric[1]) if numeric else 0
         number=e.get('episode_number')
-        if not season.isdigit() or int(season)<=0 or isinstance(number,bool):return None
+        if season_number<=0 or isinstance(number,bool):return None
         try:number=int(number)
         except (ValueError,TypeError):return None
-        return (int(season),number) if number>0 else None
+        return (season_number,number) if number>0 else None
     current=next(e for e in group['episodes'] if e['id']==ident);key=order(current)
     # Unnumbered specials are not guessed into the story's sequence.
     if key is None:return []

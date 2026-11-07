@@ -100,6 +100,30 @@ enum PairingStore {
         if let version {pairs["version_id"]=version}
         return try await request(playbackQuery("/playback/features",pairs))
     }
+    func reportEnding(ticket:String,state:String,start:Double?=nil,expected:Double?=nil,actual:Double?=nil)async {
+        var body:[String:Any]=["ticket":ticket,"state":state]
+        if let start {body["start"]=start};if let expected {body["expected"]=expected};if let actual {body["actual"]=actual}
+        let _:Empty?=try? await request("/playback/ending/report",method:"POST",body:body)
+    }
+    struct EndingPreview:Decodable {let state:String;let start:Double?;let duration:Double?;let versionId:String?}
+    func endingPreview(ticket:String,version:String?)async throws->(URL,Double,Double)? {
+        let query=playbackQuery("/playback/ending",["ticket":ticket,"version_id":version ?? ""])
+        for _ in 0..<32 {
+            try Task.checkCancellation()
+            let status:EndingPreview=try await request(query)
+            if status.state=="unavailable" || status.versionId != version {return nil}
+            if status.state=="ready",let start=status.start,let duration=status.duration {
+                var request=URLRequest(url:URL(string:base+playbackQuery("/playback/ending/file",["ticket":ticket]))!)
+                if let token {request.setValue("Bearer \(token)",forHTTPHeaderField:"Authorization")}
+                let (data,response)=try await URLSession.shared.data(for:request)
+                guard (response as? HTTPURLResponse)?.statusCode==200,data.count<12_000_000 else {return nil}
+                let file=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString+".mp4")
+                try data.write(to:file,options:.atomic);return (file,start,duration)
+            }
+            try await Task.sleep(for:.seconds(3))
+        }
+        return nil
+    }
     func upNext(episode:String) async throws -> NextEpisodes {try await request(playbackQuery("/playback/up-next",["episode_id":episode]))}
     func queue() async throws -> SeriesQueue {try await request("/playback/queue")}
     func seedQueue(episode:String,revision:Int,autoplay:Bool) async throws -> SeriesQueue {
@@ -120,8 +144,8 @@ enum PairingStore {
     func endSceneCalibration()async {
         let _:Empty?=try? await request("/scene-light/calibration",method:"DELETE")
     }
-    func sceneColour(ticket:String,colour:SceneColour)async {
-        let _:Empty?=try? await request("/scene-light",method:"POST",body:["ticket":ticket,"hue":colour.hue,"white":colour.saturation==0])
+    func sceneColour(ticket:String,colour:SceneColour,options:SceneLightingOptions = .init())async {
+        let _:Empty?=try? await request("/scene-light",method:"POST",body:["ticket":ticket,"hue":colour.hue,"white":colour.saturation==0,"saturation":options.matchSaturation ? colour.saturation : options.saturation,"brightness":options.matchBrightness ? (colour.brightness<3 ? 0 : colour.brightness) : -1,"transition":options.fade])
     }
     func stopSceneLighting(ticket:String)async {
         let _:Empty?=try? await request("/scene-light",method:"DELETE",body:["ticket":ticket])

@@ -34,7 +34,8 @@ def atomic(path, data):
         temporary.unlink(missing_ok=True)
 
 # Reviewed against the provider editions and TMDB search results, not popularity guesses.
-REVIEWED = {'bluey': ('tv', 82728), 'doctor who 2005 2022': ('tv', 57243),
+REVIEWED = {'frasier': ('tv', 3452), 'ghosts': ('tv', 17174),
+    'cunk on life': ('movie', 1253971), 'the world s end': ('movie', 107985), 'bluey': ('tv', 82728), 'doctor who 2005 2022': ('tv', 57243),
     'blankety blank': ('tv', 136009), 'the great british bake off': ('tv', 87012),
     'taskmaster new zealand': ('tv', 111880), 'masterchef junior usa': ('tv', 57755),
     'mr burton': ('movie', 1242454), 'sicario': ('movie', 273481),

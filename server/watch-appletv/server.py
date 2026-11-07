@@ -16,6 +16,8 @@ class Gateway:
         self.root = Path(settings['private_root']) / 'appletv'
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.jobs, self.sessions, self.tasks, self.attempts = {}, {}, set(), {}
+        from ending_preview import EndingPreviews
+        self.ending_previews=EndingPreviews(self.root)
         from scene_light import SceneLight
         config=getattr(bridge,'config',{})
         self.scene_light=SceneLight(settings.get('scene_light_entity'),config.get('ha_url',''),getattr(bridge,'token',''))
@@ -168,6 +170,31 @@ class Gateway:
         if expected and expected!=source_key(source,provider):raise web.HTTPConflict(reason='Playback source changed; refresh features')
         result=await asyncio.to_thread(self.features.get,source,provider,version_id,prepared)
         return web.json_response({'episode_id':ident,**result},headers={'Cache-Control':'no-store'})
+
+    async def ending_report(self,request):
+        data=await request.json();session=self.sessions.get(data.get('ticket'))
+        if not session or session['device']!=self.paired(request):raise web.HTTPNotFound()
+        state=data.get('state')
+        if state not in ('waiting-for-buffer','fetching-preview','preview-unavailable','duration-mismatch','analysing','detected','no-detection','analysis-failed'):raise web.HTTPBadRequest()
+        record={'episode':session['prepared'].get('_watch_meta',{}).get('id'),'state':state,'updated_at':time.time()}
+        for key in ('start','expected','actual'):
+            value=data.get(key)
+            if isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and 0<=value<=86400:record[key]=value
+        self.write('ending-analysis-status.json',record)
+        return web.json_response({'ok':True})
+
+    async def ending_preview(self,request):
+        session=self.sessions.get(request.query.get('ticket'))
+        if not session or session['device']!=self.paired(request):raise web.HTTPNotFound()
+        expected=request.query.get('version_id')
+        if expected is not None and expected!=(session['prepared'].get('_watch_meta',{}).get('version_id') or ''):
+            return web.json_response({'state':'unavailable'})
+        result=await self.ending_previews.get(session['prepared'])
+        result['version_id']=session['prepared'].get('_watch_meta',{}).get('version_id')
+        if request.path.endswith('/file'):
+            if result['state']!='ready':raise web.HTTPNotFound()
+            return web.FileResponse(result['path'],headers={'Content-Type':'video/mp4','Cache-Control':'private, no-store'})
+        return web.json_response({k:v for k,v in result.items() if k!='path'},headers={'Cache-Control':'no-store'})
 
     async def up_next(self,request):
         ident=request.query.get('episode_id');rows=self.project()
@@ -418,7 +445,7 @@ class Gateway:
                             ticket=secrets.token_urlsafe(32)
                             for old,value in list(self.sessions.items()):
                                 if value['device']==device:await self.release(old)
-                            self.sessions[ticket]={'device':device,'prepared':{'_watch_meta':meta,'native':True,'delivery':'native-'+route['provider']},'stream':None,'seen':time.time()}
+                            self.sessions[ticket]={'device':device,'prepared':{'_watch_meta':meta,'native':True,'delivery':'native-'+route['provider'],'_ending_url':url if route['provider']=='bbc' and not route['live'] else None},'stream':None,'seen':time.time()}
                             self.jobs[job].update(state='ready',ticket=ticket,url=url,native=route,metadata=meta,initial_seek=0 if route['live'] else position)
                             self.write('request-status.json',{'state':'ready','episode':ident,'delivery':'native-'+route['provider'],'updated_at':time.time()})
                             return
@@ -498,7 +525,7 @@ class Gateway:
         if not session or session['device']!=self.paired(request):raise web.HTTPNotFound()
         try:
             if request.method=='DELETE':await self.scene_light.restore(ticket);return web.json_response({'ok':True})
-            return web.json_response(await self.scene_light.colour(ticket,data.get('hue'),data.get('white',False)))
+            return web.json_response(await self.scene_light.colour(ticket,data.get('hue'),data.get('white',False),saturation=data.get('saturation',100),transition=data.get('transition',3),brightness=data.get('brightness',-1)))
         except (aiohttp.ClientError,asyncio.TimeoutError):return web.json_response({'error':'Scene lighting is temporarily unavailable.'},status=503)
 
     async def release(self, ticket):
@@ -563,7 +590,8 @@ class Gateway:
         for task in self.tasks: task.cancel()
         await asyncio.gather(*self.background, *self.tasks, return_exceptions=True)
         for ticket in list(self.sessions): await self.release(ticket)
-        with contextlib.suppress(Exception):await self.scene_light.close()
+        with contextlib.suppress(Exception):await self.ending_previews.close()
+        await self.scene_light.close()
 
     def app(self):
         @web.middleware
@@ -589,6 +617,9 @@ class Gateway:
         app.router.add_get('/library', self.library)
         app.router.add_get('/playback/capabilities',self.playback_capabilities)
         app.router.add_get('/playback/features',self.playback_features)
+        app.router.add_post('/playback/ending/report',self.ending_report)
+        app.router.add_get('/playback/ending',self.ending_preview)
+        app.router.add_get('/playback/ending/file',self.ending_preview)
         app.router.add_get('/playback/up-next',self.up_next)
         app.router.add_get('/playback/queue',self.series_queue)
         app.router.add_post('/playback/queue',self.series_queue)

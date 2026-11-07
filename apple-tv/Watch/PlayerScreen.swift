@@ -17,8 +17,11 @@ struct PlaybackSelection: Identifiable {
     private var dismissedSkipIDs=Set<String>()
     @Published var nextEpisode:NextEpisode?
     @Published var showUpNext=false
+    @Published var returnToPrevious=false
     @Published var creditsCue:PlaybackInterval?
     private var creditsState=CreditsCueState()
+    private var visualCredits:VisualCreditsSampler?
+    private var detectedCredits:PlaybackInterval?
     @Published var countdown:Int?
     @Published var nextMessage:String?
     @Published var switchingEpisode=false
@@ -48,6 +51,46 @@ struct PlaybackSelection: Identifiable {
     private var itvHTTP:ITVProbeHTTP?
     @Published var signInProvider:SignInProvider?
     private var sceneLighting:SceneLightingSampler?
+    @Published var lightingOptions=SceneLightingOptions.load()
+    @Published var lightingLookAheadStatus="Off"
+    @Published var lightingEnabled=UserDefaults.standard.bool(forKey:"watch.sceneLighting")
+    @Published private(set) var lightingControlsVersion=0
+    func setLightingEnabled(_ enabled:Bool) {
+        lightingEnabled=enabled;UserDefaults.standard.set(enabled,forKey:"watch.sceneLighting")
+        lightingControlsVersion+=1;sceneLighting?.settingsChanged()
+    }
+    func changeLighting(_ update:(inout SceneLightingOptions)->Void) {
+        update(&lightingOptions);lightingOptions.save();lightingControlsVersion+=1;sceneLighting?.settingsChanged()
+    }
+    func sceneLightingMenu()->UIMenu {
+        func seconds(_ value:Double)->String {value==0 ? "Off" : String(format:"%g",value)+" s"}
+        func choices(_ title:String,_ values:[Double],_ current:Double,_ update:@escaping (inout SceneLightingOptions,Double)->Void)->UIMenu {
+            UIMenu(title:title+" · "+seconds(current),options:.singleSelection,children:values.map {value in
+                UIAction(title:seconds(value),state:current==value ? .on : .off) { [weak self] action in self?.changeLighting{update(&$0,value)};action.state = .on }
+            })
+        }
+        var actions:[UIMenuElement]=[
+            UIAction(title:"Scene lighting",image:UIImage(systemName:"lightbulb"),state:lightingEnabled ? .on : .off) { [weak self] _ in guard let self else {return};self.setLightingEnabled(!self.lightingEnabled) },
+            UIAction(title:"Match scene saturation",state:lightingOptions.matchSaturation ? .on : .off) { [weak self] action in
+                guard let self else {return};self.changeLighting{$0.matchSaturation.toggle()};action.state=self.lightingOptions.matchSaturation ? .on : .off
+            },
+            UIAction(title:"Match scene brightness",state:lightingOptions.matchBrightness ? .on : .off) { [weak self] action in
+                guard let self else {return};self.changeLighting{$0.matchBrightness.toggle()};action.state=self.lightingOptions.matchBrightness ? .on : .off
+            },
+            choices("Sample window",[0,2,5,10,20],lightingOptions.averagingWindow,{$0.averagingWindow=$1}),
+            choices("Fade time",[0.5,1,3,5,8],lightingOptions.fade,{$0.fade=$1}),
+            choices("Look ahead",[0,0.5,1,2,3],lightingOptions.lookAhead,{$0.lookAhead=$1}),
+            choices("Sampling interval",[0.5,1,2,4],lightingOptions.sampleInterval,{$0.sampleInterval=$1}),
+            UIAction(title:"Neutral → white",state:lightingOptions.neutralWhite ? .on : .off) { [weak self] _ in guard let self else {return};self.changeLighting{$0.neutralWhite.toggle()} },
+            UIMenu(title:"Saturation · \(Int(lightingOptions.saturation))%",options:.singleSelection,children:[20.0,40,60,80,100].map {level in
+                UIAction(title:"\(Int(level))%",state:lightingOptions.saturation==level ? .on : .off) { [weak self] _ in self?.changeLighting{$0.saturation=level} }
+            }),
+            UIAction(title:"Reset lighting controls",image:UIImage(systemName:"arrow.counterclockwise")) { [weak self] _ in self?.changeLighting{$0=SceneLightingOptions()} }
+        ]
+        if fairPlay != nil {actions.append(UIAction(title:"Picture sampling unavailable for this stream",attributes:.disabled,handler:{_ in}))}
+        else if lightingOptions.lookAhead>0 {actions.append(UIAction(title:"Look ahead · "+lightingLookAheadStatus,attributes:.disabled,handler:{_ in}))}
+        return UIMenu(title:"Scene lighting",image:UIImage(systemName:"lightbulb"),children:actions)
+    }
     private var directBBC=false
     private var uhdActive=false
     private var forceHD=false
@@ -79,10 +122,10 @@ struct PlaybackSelection: Identifiable {
         guard !closed else { return }
         self.playWhenReady=playWhenReady
         extrasTask?.cancel();planningTask?.cancel();completionTask?.cancel();cancelCountdown()
-        chapters=[];skipMarkers=[];nextEpisode=nil;queueSnapshot=nil;showUpNext=false;creditsCue=nil
+        chapters=[];skipMarkers=[];nextEpisode=nil;queueSnapshot=nil;showUpNext=false;returnToPrevious=false;creditsCue=nil
         completionGate.reset();autoplayCancelled=false;warmedNext=nil;catalogueWarmTask?.cancel()
         finished=false; generation += 1; let mine=generation
-        sceneLighting?.stop();sceneLighting=nil
+        sceneLighting?.stop();sceneLighting=nil;visualCredits?.stop();visualCredits=nil;detectedCredits=nil
         task?.cancel(); player.pause();bbcUHD.stop();uhdActive=false
         if let ticket { let old=position; Task { await api.progress(ticket:ticket,position:old) } }
         let previous=ticket; ticket=nil; preparing=true; reconnecting=automatic || keepFrame; buffering=true; error=nil
@@ -167,7 +210,24 @@ struct PlaybackSelection: Identifiable {
                 item.externalMetadata=Self.assetMetadata(metadata)
                 attach(item); player.replaceCurrentItem(with:item); previousFairPlay?.stop();oldITVHTTP?.cancel(); player.automaticallyWaitsToMinimizeStalling=true
                 let lighting=SceneLightingSampler(api:api);sceneLighting=lighting
-                lighting.attach(item:item,player:player,ticket:ticket,accessible:nextFairPlay == nil)
+                lighting.lookAheadStatusChanged = { [weak self] status in
+                    guard let self,self.generation==mine,!self.closed,self.lightingLookAheadStatus != status else {return}
+                    self.lightingLookAheadStatus=status;self.lightingControlsVersion+=1
+                }
+                // A same-version BBC HD rendition can supply light samples for
+                // UHD without decoding the 4K picture twice. Otherwise use the
+                // active asset and enforce the companion's resolution limit.
+                let aheadAsset:AVAsset? = uhdActive && prepared.metadata?.versionId==metadata.versionId ? prepared.url.flatMap(URL.init(string:)).map{AVURLAsset(url:$0)} : nil
+                lighting.attach(item:item,player:player,ticket:ticket,accessible:nextFairPlay == nil,lookAheadAsset:aheadAsset)
+                if !selection.programme.live && !selection.programme.film && nextFairPlay == nil {
+                    let detector=VisualCreditsSampler();visualCredits=detector
+                    let key=metadata.sourceKey.flatMap {source in metadata.versionId.map {version in Data((selection.episode.id+"|"+source+"|"+version).utf8).base64EncodedString()} }
+                    detector.attach(item:item,player:player,offset:offset,duration:{[weak self] in self?.duration ?? 0},cacheKey:key,api:api,ticket:ticket,version:metadata.versionId) { [weak self] cue in
+                        guard let self,self.generation==mine,!self.closed else {return}
+                        self.detectedCredits=cue
+                    }
+                }
+
                 if let initialSeek=prepared.initialSeek, initialSeek>0 || (!selection.programme.live && !nativeTransport) {
                     await player.seek(to:CMTime(seconds:initialSeek,preferredTimescale:600),toleranceBefore:.zero,toleranceAfter:.zero)
                     guard mine==generation, !closed else { return }
@@ -245,7 +305,7 @@ struct PlaybackSelection: Identifiable {
         if creditsCue == nil {
             creditsCue=creditsState.offer(markers:chapters,position:position,duration:duration,
                 playing:player.timeControlStatus == .playing,hasNext:nextEpisode != nil,
-                blocked:preparing || buffering || reconnecting || showUpNext || finished || error != nil || selection.programme.live)
+                blocked:preparing || buffering || reconnecting || showUpNext || finished || error != nil || selection.programme.live,detected:detectedCredits)
         }
         if let duration=metadata?.durationSeconds, duration>0 { position=min(duration,position) }
         if !selection.programme.live,nextEpisode != nil,!autoplayCancelled {
@@ -273,7 +333,7 @@ struct PlaybackSelection: Identifiable {
     }
     func didEnd() {
         guard !finished,!closed,!preparing else {return}
-        sceneLighting?.stop();
+        sceneLighting?.stop();visualCredits?.stop();
         let now=player.currentTime().seconds
         let actual=now.isFinite ? offset+max(0,now) : position
         if completionGate.accept(position:actual,duration:duration,live:selection.programme.live,failed:error != nil || buffering) {
@@ -442,32 +502,38 @@ struct PlaybackSelection: Identifiable {
         // Do not briefly mount the manual/full-screen queue panel between episodes.
         let continuing=autoplay && !autoplayCancelled && nextEpisode != nil && queueSnapshot?.autoplay == true
         if !continuing {creditsCue=nil}
-        cancelCountdown();planningTask?.cancel();showUpNext = !continuing
-        guard let ticket else {showUpNext=true;return}
+        cancelCountdown();planningTask?.cancel();showUpNext = !continuing && nextEpisode != nil
+        guard let ticket else {presentCompletion();return}
         let mine=generation;let episode=selection.episode.id;let at=position;let queue=queueSnapshot
         completionTask=Task { [weak self] in
             guard let self else {return}
             do {
                 try await api.saveCompletion(ticket:ticket,position:at)
                 guard !Task.isCancelled,generation==mine,!closed else {return}
-                guard let queue,queue.current?.id==episode else {creditsCue=nil;showUpNext=true;return}
+                guard let queue,queue.current?.id==episode else {presentCompletion();return}
                 let updated=try await api.advanceQueue(episode:episode,revision:queue.revision)
                 guard !Task.isCancelled,generation==mine,!closed else {return}
                 queueSnapshot=updated;nextEpisode=updated.current?.available == false ? nil : updated.current
                 if autoplay,!autoplayCancelled,updated.autoplay,nextEpisode != nil {playNext()}
-                else {creditsCue=nil;showUpNext=true}
+                else {presentCompletion()}
             } catch {
                 guard !Task.isCancelled,generation==mine,!closed else {return}
                 // A lost response may have advanced on the server. Never repeat
                 // the completion mutation automatically or start media on doubt.
-                creditsCue=nil;showUpNext=true
+                creditsCue=nil;showUpNext=false
                 queueSnapshot=nil;nextMessage="Automatic continuation is unavailable. You can choose Play next."
                 if (error as? WatchHTTPError)?.status==409,
                    let latest=try? await api.queue(),!Task.isCancelled,generation==mine,!closed {
                     if latest.current?.id != episode {nextEpisode=latest.current?.available == false ? nil : latest.current}
                 }
+                presentCompletion()
             }
         }
+    }
+    private func presentCompletion() {
+        creditsCue=nil
+        if nextEpisode == nil {showUpNext=false;returnToPrevious=true}
+        else {showUpNext=true}
     }
     func openUpNext() {creditsCue=nil;showUpNext=true}
     func dismissCreditsCue() {creditsCue=nil;cancelAutoplay()}
@@ -506,7 +572,7 @@ struct PlaybackSelection: Identifiable {
         status=nil; itemStatus=nil
         if let ended { NotificationCenter.default.removeObserver(ended) }; if let stalled { NotificationCenter.default.removeObserver(stalled) };if let failedToEnd { NotificationCenter.default.removeObserver(failedToEnd) }
         if let ticket { let final=position; let completed=finished; Task { await api.progress(ticket:ticket,position:final,completed:completed); await api.release(ticket:ticket) } }; ticket=nil
-        sceneLighting?.stop();sceneLighting=nil
+        sceneLighting?.stop();sceneLighting=nil;visualCredits?.stop();visualCredits=nil;detectedCredits=nil
         bbcUHD.stop();player.replaceCurrentItem(with:nil);fairPlay?.stop();fairPlay=nil;itvHTTP?.cancel();itvHTTP=nil
     }
 }
@@ -541,15 +607,16 @@ struct NativePlayer: UIViewControllerRepresentable {
         guard !customTransport else { return }
         context.coordinator.install(in:controller)
         context.coordinator.update(item:model.player.currentItem,metadata:model.metadata,programme:model.selection.programme,episode:model.selection.episode)
-        guard !model.selection.programme.live else {controller.transportBarCustomMenuItems=[];return}
-        var menus:[UIMenu]=[]
+        let menuKey="\(model.selection.programme.live):\(model.lightingControlsVersion):\(model.chapters.map(\.id)):\(model.activeSkip?.id ?? ""):\(model.nextEpisode?.id ?? ""):\(model.nativeTransport):\(model.hasStarted)"
+        guard context.coordinator.needsMenus(menuKey) else {return}
+        // AVKit tvOS does not reliably expose deferred transport-menu children.
+        var menus:[UIMenu]=[model.sceneLightingMenu()]
         if !model.chapters.isEmpty {
             let actions=model.chapters.map {chapter in UIAction(title:chapter.title+" · "+EpisodeTimeline.time(chapter.start)) {_ in model.selectChapter(chapter)}}
             menus.append(UIMenu(title:"Chapters",image:UIImage(systemName:"list.bullet"),children:actions))
         }
         var extras:[UIAction]=[]
         if let marker=model.activeSkip {extras.append(UIAction(title:marker.kind == "recap" ? "Skip recap" : "Skip intro",image:UIImage(systemName:"forward.end")) {_ in model.skip(marker)})}
-        if model.nextEpisode != nil {extras.append(UIAction(title:"Up next",image:UIImage(systemName:"play.rectangle.on.rectangle")) {_ in model.openUpNext()})}
         if !extras.isEmpty {menus.append(UIMenu(title:"Episode",image:UIImage(systemName:"ellipsis.circle"),children:extras))}
         controller.transportBarCustomMenuItems=menus
     }
@@ -559,6 +626,8 @@ struct NativePlayer: UIViewControllerRepresentable {
         private let close:()->Void
         init(model:PlaybackModel,close:@escaping ()->Void) {self.model=model;self.close=close;super.init()}
         private var installed=false
+        private var menuKey:String?
+        func needsMenus(_ key:String)->Bool {guard menuKey != key else {return false};menuKey=key;return true}
         private let badge=UIVisualEffectView(effect:UIBlurEffect(style:.dark))
         private let label=UILabel()
         private let brandHost=UIHostingController(rootView:AnyView(EmptyView()))
@@ -682,7 +751,7 @@ struct PlayerScreen: View {
                 VStack {Spacer();HStack {Spacer();CreditsUpNextCard(model:model,next:next,close:{dismiss()})}}
                     .padding(.trailing,88).padding(.bottom,80)
             }
-            if model.showUpNext && model.error == nil {
+            if model.showUpNext && model.nextEpisode != nil && model.error == nil {
                 Color.black.opacity(0.6).ignoresSafeArea()
                 EpisodeUpNextPanel(model:model,close:{dismiss()})
             }
@@ -702,6 +771,7 @@ struct PlayerScreen: View {
                 }.padding(44).background(.regularMaterial,in:RoundedRectangle(cornerRadius:24))
             }
         }.task { model.begin() }.onDisappear { model.close() }
+            .onChange(of:model.returnToPrevious) {_,shouldReturn in if shouldReturn {dismiss()}}
             .sheet(isPresented:$showingChapters) {EpisodeChapters(model:model,close:{showingChapters=false})}
 
     }
@@ -818,9 +888,6 @@ struct EpisodeTransport:View {
                             if !model.chapters.isEmpty {
                                 Button("Chapters") {chapters();touch()}.buttonStyle(TransportControlStyle(selected:focus == .chapters)).focusEffectDisabled().focused($focus,equals:.chapters)
                             }
-                            if model.nextEpisode != nil {
-                                Button("Up next") {model.openUpNext();touch()}.buttonStyle(TransportControlStyle(selected:focus == .next)).focusEffectDisabled().focused($focus,equals:.next)
-                            }
                             Spacer()
                             Button("Back to library",action:close).buttonStyle(TransportControlStyle(selected:focus == .close)).focusEffectDisabled().focused($focus,equals:.close)
                         }.font(.system(size:23,weight:.medium))
@@ -934,44 +1001,72 @@ struct CreditsUpNextCard:View {
     @ObservedObject var model:PlaybackModel
     let next:NextEpisode
     let close:()->Void
-    @FocusState private var playFocused:Bool
+    private enum Action:Hashable {case next,exit}
+    @FocusState private var focused:Action?
+    @State private var artworkHasTitle=true
+    private var artwork:String? {next.thumbnail ?? next.artwork}
+    private var brands:[Brand] {next.brands ?? model.metadata?.brands ?? model.selection.programme.brands}
     var body:some View {
-        VStack(alignment:.leading,spacing:14) {
-            HStack(alignment:.center,spacing:18) {
-                VStack(alignment:.leading,spacing:6) {
-                    Text("UP NEXT").font(.system(size:15,weight:.bold)).tracking(2).foregroundStyle(.white.opacity(0.65))
-                    Text(next.showTitle ?? model.selection.programme.title)
-                        .font(.system(size:21,weight:.medium)).lineLimit(1)
+        ZStack(alignment:.bottomLeading) {
+            Artwork(source:artwork,maxPixel:1000).frame(width:610,height:381)
+            LinearGradient(stops:[.init(color:.black.opacity(0.4),location:0),.init(color:.clear,location:0.3),.init(color:.clear,location:0.38),.init(color:.black.opacity(0.58),location:0.65),.init(color:Color(white:0.025).opacity(0.98),location:1)],startPoint:.top,endPoint:.bottom)
+            VStack(alignment:.leading,spacing:0) {
+                HStack {
+                    Text("UP NEXT").font(.system(size:15,weight:.semibold)).tracking(2)
+                    Spacer()
+                    Brands(items:Array(brands.prefix(1)))
                 }
-                Spacer(minLength:12)
-                if let seconds=model.countdown {
-                    ZStack {
-                        Circle().stroke(.white.opacity(0.2),lineWidth:3)
-                        Circle().trim(from:0,to:Double(seconds)/10).stroke(.white,lineWidth:3).rotationEffect(.degrees(-90))
-                        Text("\(seconds)").font(.system(size:23,weight:.semibold)).monospacedDigit()
-                    }.frame(width:50,height:50).accessibilityLabel("Next episode in \(seconds) seconds")
+                if !artworkHasTitle {
+                    if let logo=next.showLogo ?? model.selection.programme.logoSource {
+                        Artwork(source:logo,fit:true,maxPixel:400).frame(width:165,height:62,alignment:.leading).padding(.top,12)
+                    } else {
+                        Text(next.showTitle ?? model.selection.programme.title).font(.system(size:25,weight:.semibold)).lineLimit(1).padding(.top,12)
+                    }
                 }
-            }
-            HStack(alignment:.center,spacing:20) {
-                Artwork(source:next.thumbnail ?? next.artwork,maxPixel:500)
-                    .frame(width:176,height:99).clipped().clipShape(RoundedRectangle(cornerRadius:12))
-                VStack(alignment:.leading,spacing:9) {
-                    Text(next.title).font(.system(size:24,weight:.semibold)).lineLimit(2)
-                    Text(next.caption).font(.system(size:17)).foregroundStyle(.white.opacity(0.65)).lineLimit(2)
-                }.frame(maxWidth:.infinity,alignment:.leading)
-            }.fixedSize(horizontal:false,vertical:true)
-            HStack(spacing:26) {
-                Button(model.switchingEpisode ? "Starting…" : "Next",systemImage:"play.fill") {model.playNext()}
-                    .disabled(model.switchingEpisode).focused($playFocused)
-                Button("Exit") {model.cancelAutoplay();close()}
-            }.font(.system(size:20,weight:.medium)).padding(.top,10)
-        }.padding(28).frame(width:610,alignment:.leading).fixedSize(horizontal:false,vertical:true)
-            .background(LinearGradient(colors:[Color(white:0.1),Color(white:0.035)],startPoint:.topLeading,endPoint:.bottomTrailing),in:RoundedRectangle(cornerRadius:24))
-            .overlay {RoundedRectangle(cornerRadius:24).strokeBorder(.white.opacity(0.14),lineWidth:1)}
+                Spacer(minLength:20)
+                Text(next.displayTitle).font(.system(size:29,weight:.semibold)).lineLimit(2)
+                    .shadow(color:.black.opacity(0.4),radius:8,y:2)
+                Text(next.caption).font(.system(size:18)).foregroundStyle(.white.opacity(0.75)).lineLimit(1).padding(.top,7)
+                HStack(spacing:14) {
+                    Button {model.playNext()} label:{
+                        HStack(spacing:12) {
+                            Image(systemName:"play.fill").font(.system(size:17))
+                            Text(model.switchingEpisode ? "Starting…" : "Next episode")
+                            Spacer(minLength:0)
+                            if let seconds=model.countdown {
+                                Text("\(seconds)").monospacedDigit().padding(.leading,16)
+                                    .overlay(alignment:.leading) {Rectangle().fill(.primary.opacity(0.2)).frame(width:1)}
+                                    .accessibilityLabel("Next episode in \(seconds) seconds")
+                            }
+                        }.frame(maxWidth:.infinity)
+                    }.disabled(model.switchingEpisode).focused($focused,equals:.next)
+                        .buttonStyle(UpNextArtworkButtonStyle(selected:focused == .next,primary:true)).focusEffectDisabled()
+                    Button("Exit") {model.cancelAutoplay();close()}.focused($focused,equals:.exit)
+                        .buttonStyle(UpNextArtworkButtonStyle(selected:focused == .exit,primary:false)).focusEffectDisabled()
+                }.font(.system(size:21,weight:.semibold)).padding(.top,22)
+            }.padding(28)
+        }.frame(width:610,height:381).background(Color(white:0.08))
+            .clipShape(RoundedRectangle(cornerRadius:WatchDesign.radius))
             .shadow(color:.black.opacity(0.5),radius:26,y:12)
-            .focusSection().task {await Task.yield();playFocused=true}
+            .focusSection().task {await Task.yield();focused = .next}
+            .task(id:artwork) {
+                artworkHasTitle=true
+                if let artwork {artworkHasTitle=await ArtworkIdentity.containsTitle(artwork,title:next.showTitle ?? model.selection.programme.title)}
+                else {artworkHasTitle=false}
+            }
             .onExitCommand {model.cancelAutoplay();close()}
             .onPlayPauseCommand {model.toggle()}
+    }
+}
+
+private struct UpNextArtworkButtonStyle:ButtonStyle {
+    let selected:Bool
+    let primary:Bool
+    func makeBody(configuration:Configuration)->some View {
+        configuration.label.padding(.horizontal,22).frame(height:58)
+            .foregroundStyle(selected ? Color.black : Color.white)
+            .background(selected ? Color.white : Color.white.opacity(primary ? 0.2 : 0.12),in:RoundedRectangle(cornerRadius:12))
+            .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
 

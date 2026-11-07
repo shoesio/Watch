@@ -54,6 +54,44 @@ class Lamp(unittest.IsolatedAsyncioTestCase):
   await self.lamp.colour('a',310)
   self.assertEqual(self.lamp.owner,'a');self.assertFalse(self.lamp.status()['manual_override'])
 
+ async def test_live_controls_preserve_brightness(self):
+  await self.lamp.colour('a',220,saturation=60,transition=8)
+  self.assertEqual(self.calls[-1][1]['hs_color'],[220,60])
+  self.assertEqual(self.calls[-1][1]['transition'],8)
+  self.assertNotIn('brightness',self.calls[-1][1])
+  self.now+=1;await self.lamp.colour('a',220,saturation=60,transition=1)
+  self.assertEqual(self.calls[-1][1]['transition'],1)
+  self.now+=1;await self.lamp.colour('a',220,white=True,saturation=60,transition=1)
+  self.assertEqual(self.calls[-1][1]['hs_color'],[220,0])
+ async def test_live_control_bounds(self):
+  for value in [True,'slow',None,float('nan'),-1,11]:
+   with self.assertRaises(ValueError):await self.lamp.colour('a',30,transition=value)
+  for value in [True,'max',None,float('nan'),-1,101]:
+   with self.assertRaises(ValueError):await self.lamp.colour('a',30,saturation=value)
+  self.assertEqual(self.calls,[])
+
+ async def test_brightness_black_recovery_and_restore(self):
+  await self.lamp.colour('a',220,saturation=40,brightness=20)
+  self.assertEqual(self.calls[-1][1]['brightness'],51)
+  self.now+=6;await self.lamp.colour('a',220,brightness=0)
+  self.assertTrue(self.calls[-1][0].endswith('turn_off'))
+  self.now+=6;await self.lamp.colour('a',220,brightness=60)
+  self.assertEqual(self.calls[-1][1]['brightness'],153)
+  self.assertEqual(self.lamp.owner,'a')
+  self.now+=6;await self.lamp.colour('a',220)
+  self.assertEqual(self.calls[-1][1]['brightness'],82)
+  self.now+=6;await self.lamp.restore('a')
+  self.assertEqual(self.state['attributes']['brightness'],82)
+ async def test_restore_after_black(self):
+  await self.lamp.colour('a',220,brightness=0)
+  self.now+=6;await self.lamp.restore('a')
+  self.assertEqual(self.state['state'],'on')
+  self.assertEqual(self.state['attributes']['brightness'],82)
+ async def test_invalid_brightness(self):
+  for value in [True,None,'dark',float('nan'),-2,101]:
+   with self.assertRaises(ValueError):await self.lamp.colour('a',30,brightness=value)
+  self.assertEqual(self.calls,[])
+
 class GatewayBoundary(unittest.IsolatedAsyncioTestCase):
  async def idle(self):
   import asyncio

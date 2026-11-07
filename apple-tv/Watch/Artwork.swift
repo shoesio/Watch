@@ -76,6 +76,12 @@ struct WatchActionButtonStyle:ButtonStyle {
 }
 
 // Downsample before displaying; moving focus should not decode full-size hero images.
+enum ArtworkIdentity {
+    static func containsTitle(_ source:String,title:String)async->Bool {
+        await ArtworkCache.shared.containsTitle(source,title:title)
+    }
+}
+
 private actor ArtworkCache {
     static let shared=ArtworkCache()
     private let cache=NSCache<NSString,UIImage>()
@@ -454,7 +460,7 @@ struct WarmupScreen:View {
     var failed=false
     private var title:String {
         if programme.live { return metadata?.title ?? programme.guide?.now?.title ?? programme.title }
-        if programme.film,episode?.title == programme.title { return "" }
+        if let episode,episode.title.trimmingCharacters(in:.whitespacesAndNewlines).compare(programme.title.trimmingCharacters(in:.whitespacesAndNewlines),options:[.caseInsensitive,.diacriticInsensitive]) == .orderedSame { return "" }
         return episode?.title ?? ""
     }
     private var synopsis:String {
