@@ -53,10 +53,11 @@ struct WatchCardButtonStyle:ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration:Configuration)->some View {
         configuration.label
-            .overlay {RoundedRectangle(cornerRadius:WatchDesign.radius).strokeBorder(.white.opacity(focused ? 0.9 : 0),lineWidth:3)}
-            .scaleEffect(configuration.isPressed ? 0.985 : (focused ? 1.025 : 1))
-            .shadow(color:.black.opacity(focused ? 0.4 : 0),radius:16,y:8)
-            .animation(reduceMotion ? nil : .easeOut(duration:0.16),value:focused)
+            .zIndex(focused ? 1 : 0)
+            .brightness(focused && reduceMotion ? 0.06 : 0)
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 1.035 : (focused ? 1.075 : 1)))
+            .shadow(color:.black.opacity(focused ? 0.52 : 0),radius:focused ? 24 : 0,y:focused ? 14 : 0)
+            .animation(reduceMotion ? nil : .spring(response:0.28,dampingFraction:0.82),value:focused)
             .animation(reduceMotion ? nil : .easeOut(duration:0.12),value:configuration.isPressed)
     }
 }
@@ -102,6 +103,30 @@ private actor ArtworkCache {
         let result=await ArtworkTitleAnalysis.shared.containsTitle(bitmap,title:title)
         if titleChecks.count>1000 {titleChecks.removeAll()}
         titleChecks[key]=result;return result
+    }
+    func cardImage(_ source:String,maxPixel:Int,width:CGFloat,height:CGFloat,fit:Bool)async->UIImage? {
+        let key="card#\(source)#\(maxPixel)#\(width)#\(height)#\(fit)"
+        if let image=cache.object(forKey:key as NSString) {return image}
+        if let task=pending[key] {return await task.value}
+        guard let original=await image(source,maxPixel:maxPixel) else {return nil}
+        // Rendering large rounded posters on the main actor stalls remote focus.
+        // Reuse the existing bounded cache and coalesce identical card renders.
+        if let task=pending[key] {return await task.value}
+        let task=Task.detached(priority:.utility) {()->UIImage? in
+            let format=UIGraphicsImageRendererFormat()
+            format.scale=min(2,max(original.size.width/width,original.size.height/height));format.opaque=false
+            return UIGraphicsImageRenderer(size:CGSize(width:width,height:height),format:format).image {context in
+                UIBezierPath(roundedRect:CGRect(x:0,y:0,width:width,height:height),cornerRadius:20).addClip()
+                UIColor(white:0.08,alpha:1).setFill();context.fill(CGRect(x:0,y:0,width:width,height:height))
+                let factor=fit ? min(width/original.size.width,height/original.size.height) : max(width/original.size.width,height/original.size.height)
+                let size=CGSize(width:original.size.width*factor,height:original.size.height*factor)
+                original.draw(in:CGRect(x:(width-size.width)/2,y:(height-size.height)/2,width:size.width,height:size.height))
+            }
+        }
+        pending[key]=task
+        let result=await task.value;pending[key]=nil
+        if let result {cache.setObject(result,forKey:key as NSString,cost:Int(result.size.width*result.size.height*result.scale*result.scale*4))}
+        return result
     }
     func image(_ source:String,maxPixel:Int) async -> UIImage? {
         let key=source+"#\(maxPixel)"
@@ -195,6 +220,148 @@ struct Artwork: View {
         }
     }
 }
+// UIKit owns the floating highlight and remote-driven image motion. SwiftUI's
+// NavigationLink/Button remains the only focus target; the foreground stays a
+// separate overlay layer rather than being flattened into the photograph.
+private struct TVFloatingCard<Foreground:View>:View {
+    let source:String?
+    var fit=false
+    var maxPixel=900
+    let width:CGFloat
+    let height:CGFloat
+    @ViewBuilder let foreground:()->Foreground
+    @Environment(\.isFocused) private var focused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var image:UIImage?
+    var body:some View {
+        NativeFloatingCard(image:image,width:width,height:height,focused:focused,reduceMotion:reduceMotion,foreground:foreground())
+            .frame(width:width,height:height)
+            .task(id:(source ?? "")+"#\(maxPixel)#\(width)#\(height)#\(fit)") {
+                image=nil
+                guard let source else {return}
+                let loaded=await ArtworkCache.shared.cardImage(source,maxPixel:maxPixel,width:width,height:height,fit:fit)
+                guard !Task.isCancelled else {return}
+                image=loaded
+            }
+    }
+}
+
+private final class CardFocusSheen:UIView {
+    override class var layerClass:AnyClass {CAGradientLayer.self}
+    override init(frame:CGRect) {
+        super.init(frame:frame)
+        isUserInteractionEnabled=false;alpha=0
+        let gradient=layer as! CAGradientLayer
+        gradient.type = .radial
+        gradient.colors=[UIColor.white.withAlphaComponent(0.22).cgColor,UIColor.white.withAlphaComponent(0.05).cgColor,UIColor.clear.cgColor]
+        gradient.locations=[0,0.45,1]
+        gradient.startPoint=CGPoint(x:0.18,y:0.04);gradient.endPoint=CGPoint(x:1,y:1)
+        layer.cornerRadius=WatchDesign.radius;clipsToBounds=true
+    }
+    required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
+}
+
+private final class FloatingCardLayers:UIView {
+    let stage=UIView()
+    let photograph=UIImageView()
+    let lighting=UIView()
+    let sheen=CardFocusSheen()
+    override init(frame:CGRect) {
+        super.init(frame:frame)
+        isUserInteractionEnabled=false;clipsToBounds=false
+        stage.clipsToBounds=false;stage.isUserInteractionEnabled=false
+        lighting.clipsToBounds=true;lighting.layer.cornerRadius=WatchDesign.radius;lighting.isUserInteractionEnabled=false
+        lighting.addSubview(sheen)
+        photograph.contentMode = .scaleToFill
+        // The whole stage owns motion. Independent UIImageView focus effects
+        // would move only the bitmap and break registration with the title.
+        photograph.adjustsImageWhenAncestorFocused=false
+        addSubview(stage);stage.addSubview(photograph)
+        var perspective=CATransform3DIdentity;perspective.m34 = -1/1000
+        layer.sublayerTransform=perspective
+        stage.layer.sublayerTransform=perspective
+    }
+    required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        stage.bounds=bounds;stage.center=CGPoint(x:bounds.midX,y:bounds.midY)
+        photograph.frame=stage.bounds
+        lighting.frame=stage.bounds
+        sheen.bounds=stage.bounds.insetBy(dx:-bounds.width*0.1,dy:-bounds.height*0.1);sheen.center=CGPoint(x:stage.bounds.midX,y:stage.bounds.midY)
+    }
+}
+
+private struct NativeFloatingCard<Foreground:View>:UIViewRepresentable {
+    let image:UIImage?
+    let width:CGFloat
+    let height:CGFloat
+    let focused:Bool
+    let reduceMotion:Bool
+    let foreground:Foreground
+    final class Coordinator {
+        let host:UIHostingController<Foreground>
+        var motion:UIMotionEffectGroup?
+        var foregroundMotion:UIMotionEffectGroup?
+        var sheenMotion:UIMotionEffectGroup?
+        var focused=false
+        init(_ content:Foreground) {host=UIHostingController(rootView:content)}
+    }
+    func makeCoordinator()->Coordinator {Coordinator(foreground)}
+    func makeUIView(context:Context)->FloatingCardLayers {
+        let view=FloatingCardLayers()
+        let overlay=context.coordinator.host.view!
+        overlay.backgroundColor = .clear;overlay.isUserInteractionEnabled=false
+        overlay.overrideUserInterfaceStyle = .dark
+        overlay.layer.cornerRadius=WatchDesign.radius;overlay.clipsToBounds=true
+        overlay.autoresizingMask=[.flexibleWidth,.flexibleHeight]
+        view.stage.addSubview(overlay)
+        view.stage.addSubview(view.lighting);view.lighting.layer.zPosition=24
+        return view
+    }
+    func updateUIView(_ view:FloatingCardLayers,context:Context) {
+        view.photograph.image=image
+        context.coordinator.host.rootView=foreground
+        let overlay=context.coordinator.host.view!
+        overlay.bounds=CGRect(x:0,y:0,width:width,height:height)
+        overlay.center=CGPoint(x:width/2,y:height/2)
+        view.sheen.alpha=focused ? 1 : 0
+        let enabled=focused && !reduceMotion
+        if context.coordinator.focused != enabled {
+            context.coordinator.focused=enabled
+            if let motion=context.coordinator.motion {view.stage.removeMotionEffect(motion);context.coordinator.motion=nil}
+            if let motion=context.coordinator.foregroundMotion {overlay.removeMotionEffect(motion);context.coordinator.foregroundMotion=nil}
+            if let motion=context.coordinator.sheenMotion {view.sheen.removeMotionEffect(motion);context.coordinator.sheenMotion=nil}
+            if enabled {
+                func effect(_ path:String,_ type:UIInterpolatingMotionEffect.EffectType,_ extent:Double)->UIInterpolatingMotionEffect {
+                    let effect=UIInterpolatingMotionEffect(keyPath:path,type:type)
+                    effect.minimumRelativeValue = -extent;effect.maximumRelativeValue=extent;return effect
+                }
+                let whole=UIMotionEffectGroup()
+                whole.motionEffects=[effect("layer.transform.rotation.y",.tiltAlongHorizontalAxis,0.055),effect("layer.transform.rotation.x",.tiltAlongVerticalAxis,-0.04)]
+                view.stage.addMotionEffect(whole);context.coordinator.motion=whole
+                let depth=UIMotionEffectGroup()
+                depth.motionEffects=[effect("center.x",.tiltAlongHorizontalAxis,3),effect("center.y",.tiltAlongVerticalAxis,2)]
+                overlay.addMotionEffect(depth);context.coordinator.foregroundMotion=depth
+                let light=UIMotionEffectGroup()
+                light.motionEffects=[effect("center.x",.tiltAlongHorizontalAxis,Double(width)*0.07),effect("center.y",.tiltAlongVerticalAxis,Double(height)*0.04)]
+                view.sheen.addMotionEffect(light);context.coordinator.sheenMotion=light
+            }
+            UIView.animate(withDuration:reduceMotion ? 0 : 0.22) {
+                // SwiftUI scales the complete card, including any metadata.
+                // Keep the UIKit stage at identity so layout cannot cancel or double the lift.
+                view.transform = .identity
+                overlay.layer.zPosition=enabled ? 20 : 0
+            }
+        }
+    }
+    static func dismantleUIView(_ view:FloatingCardLayers,coordinator:Coordinator) {
+        if let motion=coordinator.motion {view.stage.removeMotionEffect(motion)}
+        if let motion=coordinator.foregroundMotion {coordinator.host.view.removeMotionEffect(motion)}
+        if let motion=coordinator.sheenMotion {view.sheen.removeMotionEffect(motion)}
+        coordinator.host.view.removeFromSuperview()
+    }
+}
+
 // The focused action remains in Hero. These two inert image layers animate
 // independently of tvOS's focus engine and keep the old photo during a fetch.
 struct HeroSlideArtwork:View {
@@ -226,8 +393,12 @@ struct HeroSlideArtwork:View {
         }.allowsHitTesting(false).accessibilityHidden(true)
     }
     private func photo(_ image:UIImage,size:CGSize)->some View {
-        Image(uiImage:image).resizable().aspectRatio(contentMode:.fill)
-            .frame(width:size.width,height:size.height).clipped()
+        let scale=max(size.width/image.size.width,size.height/image.size.height)
+        let scaled=CGSize(width:image.size.width*scale,height:image.size.height*scale)
+        let top=max(size.height-scaled.height,min(0,size.height/3-scaled.height/3))
+        return Image(uiImage:image).resizable().frame(width:scaled.width,height:scaled.height)
+            .offset(x:(size.width-scaled.width)/2,y:top)
+            .frame(width:size.width,height:size.height,alignment:.topLeading).clipped()
     }
 }
 
@@ -347,8 +518,9 @@ struct Tile:View {
     var body:some View {
         CardSurface {
             VStack(alignment:.leading,spacing:12) {
-                Artwork(source:programme.artwork).frame(width:imageWidth,height:imageWidth*9/16)
-                    .overlay(alignment:.topLeading) {
+                TVFloatingCard(source:programme.artwork,width:imageWidth,height:imageWidth*9/16) {
+                  ZStack(alignment:.topLeading) {
+                    Color.clear
                         if programme.live {
                             HStack(alignment:.top) {
                                 Artwork(source:programme.channelLogo,fit:true,maxPixel:180).frame(width:64,height:32).padding(8).background(.black.opacity(0.68),in:RoundedRectangle(cornerRadius:9))
@@ -356,7 +528,8 @@ struct Tile:View {
                                 Text("LIVE").font(.system(size:15,weight:.bold)).tracking(0.5).padding(.horizontal,9).padding(.vertical,7).background(.red.opacity(0.9),in:Capsule())
                             }.padding(12)
                         } else if !programme.brands.isEmpty { CardBrands(items:programme.brands).padding(12) }
-                    }.clipShape(RoundedRectangle(cornerRadius:12))
+                  }
+                }
                 Text(programme.live ? (programme.guide?.now?.title ?? programme.title) : programme.title)
                     .font(WatchDesign.title).foregroundStyle(.white).lineLimit(2).frame(height:58,alignment:.topLeading)
                 if programme.live {
@@ -394,17 +567,21 @@ struct RatingBadge:View {
 struct EpisodeTile:View {
     let episode:Episode
     let programme:Programme
+    var showSeries=true
     @Environment(\.watchCardWidth) private var width
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            Artwork(source:episode.thumbnail ?? programme.artwork).frame(width:width,height:width*9/16)
-                .overlay(alignment:.bottomTrailing) {if !episode.brands.isEmpty {CardBrands(items:episode.brands).padding(12)}}
-                .clipShape(RoundedRectangle(cornerRadius:WatchDesign.radius))
-            VStack(alignment:.leading,spacing:10) {
-                Text(episode.title).font(WatchDesign.title).lineLimit(2).frame(height:58,alignment:.topLeading)
-                Text(episode.compactCaption).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(1)
-                Text(episode.description ?? "").font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(2).frame(height:50,alignment:.topLeading)
-                ProgressView(value:min(1,(episode.progress ?? 0)/100)).tint(.white).opacity((episode.resumeSeconds ?? 0)>0 ? 1 : 0).frame(height:4)
+            TVFloatingCard(source:episode.thumbnail ?? programme.artwork,width:width,height:width*9/16) {
+                ZStack(alignment:.bottomTrailing) {Color.clear;if !episode.brands.isEmpty {CardBrands(items:episode.brands).padding(12)}}
+            }
+            VStack(alignment:.leading,spacing:0) {
+                Text(episode.cardHeading(showSeries:showSeries)).font(WatchDesign.title).lineLimit(2)
+                if let description=episode.description,!description.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+                    Text(description.trimmingCharacters(in:.whitespacesAndNewlines))
+                        .font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(2,reservesSpace:true).padding(.top,4)
+                }
+                Text(episode.cardDetails).font(WatchDesign.detail).foregroundStyle(WatchDesign.muted).lineLimit(1).padding(.top,8)
+                ProgressView(value:min(1,(episode.progress ?? 0)/100)).tint(.white).opacity((episode.resumeSeconds ?? 0)>0 ? 1 : 0).frame(height:4).padding(.top,10)
             }.padding(.horizontal,6)
         }.frame(width:width,alignment:.topLeading).accessibilityElement(children:.combine)
     }
@@ -527,9 +704,8 @@ struct CinematicProgrammeCard:View {
         return [episodeCollection == "christmas" ? programme.editionLabel ?? "" : "",identity,episode.durationSeconds.flatMap {$0>0 ? "\(Int(($0/60).rounded()))m" : nil} ?? ""].filter{!$0.isEmpty}.joined(separator:" • ")
     }
     var body:some View {
-        ZStack(alignment:.bottomLeading) {
-            Artwork(source:source,fit:portrait,maxPixel:style == .showcase ? 1400 : 900)
-                .frame(width:width,height:height)
+        TVFloatingCard(source:source,fit:portrait,maxPixel:style == .showcase ? 1400 : 900,width:width,height:height) {
+          ZStack(alignment:.bottomLeading) {
             if !portrait {LinearGradient(colors:[.clear,.black.opacity(0.82)],startPoint:.center,endPoint:.bottom)}
             // A finished portrait poster already contains its title treatment.
             // Keep it intact instead of stamping a second logo over the first.
@@ -546,12 +722,12 @@ struct CinematicProgrammeCard:View {
                     }
                     Spacer(minLength:0)
                     Brands(items:episode?.brands.isEmpty == false ? episode!.brands : programme.brands)
-                }.padding(.horizontal,22).padding(.bottom,22)
+                }.padding(.horizontal,22).padding(.bottom,style == .continuing ? 31 : 22)
                 if let episode,(episode.resumeSeconds ?? 0)>0 {
                     GeometryReader {proxy in
                         Capsule().fill(.white.opacity(0.3))
                             .overlay(alignment:.leading) {Capsule().fill(.white).frame(width:proxy.size.width*min(1,max(0,(episode.progress ?? ((episode.resumeSeconds ?? 0)/max(1,episode.durationSeconds ?? 1)*100))/100)))}
-                    }.frame(height:4).padding(.horizontal,22).padding(.bottom,9)
+                    }.frame(height:4).padding(.horizontal,22).padding(.bottom,style == .continuing ? 18 : 9)
                 }
             }
             if style == .continuing {
@@ -569,7 +745,8 @@ struct CinematicProgrammeCard:View {
             if programme.hasNewEpisode && episodeCollection == nil {
                 VStack {HStack {if style == .continuing {Spacer()};Text("New episode").font(.system(size:17,weight:.semibold)).foregroundStyle(.black).padding(.horizontal,12).padding(.vertical,7).background(.white,in:RoundedRectangle(cornerRadius:6));if style != .continuing {Spacer()}};Spacer()}.padding(16)
             }
-        }.frame(width:width,height:height).clipShape(RoundedRectangle(cornerRadius:WatchDesign.radius))
+          }.frame(width:width,height:height)
+        }
             .task(id:(source ?? "")+programme.title) {
                 artworkHasTitle=true
                 if editorial,!portrait,let source {artworkHasTitle=await ArtworkCache.shared.containsTitle(source,title:programme.title)}

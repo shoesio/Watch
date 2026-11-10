@@ -68,6 +68,14 @@ import Foundation
         precondition(!deduped.flatMap(\.programmes).contains{$0.id=="preview"},"An already-known programme was presented as a new provider discovery")
         let continuation=discoveryA.filter{$0.id.hasPrefix("explore-")}
         precondition(continuation.dropFirst().allSatisfy{$0.title.isEmpty},"Every continuation row received another generic heading")
+        let card=programme([ep("Series 1: 1. Pilot","1",1)]).episodes[0]
+        precondition(card.cardHeading(showSeries:true)=="Series 1: Episode 1")
+        precondition(card.cardHeading(showSeries:false)=="Episode 1","Filtered and single-series views omit the series prefix")
+        let technical=programme([["id":"e","title":"Episode 1","season":"1","episode_number":1,"duration_seconds":1740,"quality":"HD","brands":[]]]).episodes[0]
+        precondition(technical.cardDetails=="29 Min • HD","Runtime/quality do not repeat the episode number")
+        let episodeRoute=EpisodeDestination(programmeID:"show:qi",episodeID:"bbc:episode/6")
+        precondition(EpisodeDestination.parse(episodeRoute.pathValue)==episodeRoute,"Episode selection survives navigation encoding")
+        precondition(EpisodeDestination.parse("episode:invalid")==nil,"Malformed episode routes are rejected")
         print("Cinematic library checks passed: later episodes/seasons, watched editions, specials, films/live exclusion and backwards-compatible artwork")
     }
 }

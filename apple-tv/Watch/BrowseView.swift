@@ -74,7 +74,7 @@ struct BrowseView:View {
             let columns=WatchDesign.gridColumns(availableWidth)
             ScrollViewReader {scroll in
             ScrollView {
-                VStack(alignment:.leading,spacing:48) {
+                LazyVStack(alignment:.leading,spacing:48) {
                     if section == .home {
                         if library.featuredShows.contains(where:{!$0.film && !$0.live}) {
                             FeaturedSpotlight(programmes:library.featuredShows.filter{!$0.film && !$0.live},tab:.home,focusRequest:heroFocusRequest) { play($0) }.id("hero-top")
@@ -163,7 +163,10 @@ struct BrowseView:View {
             .toolbarBackground(.hidden,for:.navigationBar,.tabBar)
             .navigationDestination(for:String.self) { id in
                 let collection=CollectionDestination.parse(id)
-                if let programme=library.programmes.first(where:{$0.id==(collection?.programmeID ?? id)}) {ProgrammeDestination(programme:programme,episodeCollection:collection?.collection)}
+                let episode=EpisodeDestination.parse(id)
+                if let programme=library.programmes.first(where:{$0.id==(episode?.programmeID ?? collection?.programmeID ?? id)}) {
+                    ProgrammeDestination(programme:programme,episodeCollection:collection?.collection,selectedEpisodeID:episode?.episodeID)
+                }
             }
             .task { await library.refresh(); applyRoute() }
             .onChange(of:library.routeProgrammeID) { _,_ in applyRoute() }
@@ -212,7 +215,9 @@ struct BrowseView:View {
         if path != [id] { path=[id] }
     }
     private func play(_ programme:Programme) {
-        if let episode=programme.preferred { library.deepPlay=PlaybackSelection(programme:programme,episode:episode,position:programme.live ? 0 : episode.resumeSeconds ?? 0) }
+        if programme.live {
+            if let episode=programme.preferred {library.deepPlay=PlaybackSelection(programme:programme,episode:episode,position:0)}
+        } else {path.append(programme.id)}
     }
     private func gridTile(_ programme:Programme,topRow:Bool)->some View {
         tileLink(programme).focused($browseFocus,equals:.programme(programme.id))
@@ -222,6 +227,9 @@ struct BrowseView:View {
     }
     @ViewBuilder private func tileLink(_ programme:Programme,style:BrowseCardStyle = .landscape,shelf:Bool = false,collection:String?=nil) -> some View {
         if programme.live { Button { play(programme) } label:{ Tile(programme:programme) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled() }
+        else if style == .continuing,let episode=programme.resume ?? programme.preferred {
+            NavigationLink(value:EpisodeDestination(programmeID:programme.id,episodeID:episode.id).pathValue) {CinematicProgrammeCard(programme:programme,style:style,shelf:shelf,episodeCollection:collection)}.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
+        }
         else if let collection {
             NavigationLink(value:CollectionDestination(programmeID:programme.id,collection:collection).pathValue) {CinematicProgrammeCard(programme:programme,style:style,shelf:shelf,episodeCollection:collection)}.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
         }
@@ -265,7 +273,7 @@ struct BrowseView:View {
                 LazyHStack(alignment:.top,spacing:WatchDesign.gap) {
                     if collection == "christmas" {
                         ForEach(EditorialShelves.christmasEpisodes(programmes)) {entry in
-                            Button {library.deepPlay=PlaybackSelection(programme:entry.programme,episode:entry.episode,position:entry.episode.resumeSeconds ?? 0)} label: {
+                            NavigationLink(value:EpisodeDestination(programmeID:entry.programme.id,episodeID:entry.episode.id).pathValue) {
                                 CinematicProgrammeCard(programme:entry.programme,style:.continuing,shelf:true,episodeCollection:"christmas",explicitEpisode:entry.episode)
                             }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
                                 .focused($browseFocus,equals:.shelfProgramme(focusRow ?? title,entry.id))
@@ -408,34 +416,44 @@ struct DetailView:View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let programme:Programme
     var episodeCollection:String?=nil
-    @State private var season=""
+    var selectedEpisodeID:String?=nil
+    @State private var appliedInitialEpisode=false
+    @State private var season="All series"
+    @FocusState private var episodeFocus:String?
     private var current:Programme { library.programmes.first { $0.id==programme.id } ?? programme }
     private var collectionEpisodes:[Episode] {episodeCollection == "christmas" ? current.episodes.filter{EditorialShelves.matchesChristmas(current,$0)} : current.episodes}
     private var seasons:[String] { var seen=Set<String>();return collectionEpisodes.compactMap { seen.insert($0.seasonTitle).inserted ? $0.seasonTitle : nil } }
-    private var episodes:[Episode] { collectionEpisodes.filter { season=="All episodes" || season.isEmpty || $0.seasonTitle==season } }
+    private var episodes:[Episode] { collectionEpisodes.filter { season=="All series" || season.isEmpty || $0.seasonTitle==season } }
     private var columns:[GridItem] { Array(repeating:GridItem(.fixed(cardWidth),spacing:WatchDesign.gap,alignment:.topLeading),count:columnCount) }
     var body:some View {
         WatchContentViewport {availableWidth in
         let columns=WatchDesign.gridColumns(availableWidth)
+        ScrollViewReader {scroll in
         ScrollView {
             VStack(alignment:.leading,spacing:48) {
-                Hero(programme:current,details:true,primaryTitle:episodeCollection == "christmas" && !current.film ? "Play Christmas episode" : nil) {if let episode=episodeCollection == nil ? current.preferred : episodes.first {start(episode,resume:true)}}
+                Hero(programme:current,details:true,primaryTitle:current.film ? nil : "Choose episode") {
+                    if current.film {if let episode=current.preferred {start(episode,resume:true)}}
+                    else {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration:0.25)) {scroll.scrollTo("episode-list",anchor:.top)}
+                        Task {@MainActor in await Task.yield();episodeFocus=episodes.first(where:{$0.id==selectedEpisodeID})?.id ?? episodes.first?.id}
+                    }
+                }
                 if !current.film || current.episodes.count>1 {
                     HStack(spacing:32) {
-                        SectionHeading(title:episodeCollection == "christmas" ? "Christmas episodes" : "Episodes",subtitle:"\(season=="All episodes" || season.isEmpty ? "Newest first" : season) · \(episodes.count) available").frame(width:230,alignment:.leading)
+                        SectionHeading(title:episodeCollection == "christmas" ? "Christmas episodes" : "Episodes",subtitle:"\(season=="All series" || season.isEmpty ? "Newest first" : season) · \(episodes.count) available").frame(width:230,alignment:.leading)
                         if seasons.count>1 {
                             Menu {
                                 Picker("Series",selection:$season) {
                                     ForEach(seasons,id:\.self) { Text($0).tag($0) }
-                                    Text("All episodes").tag("All episodes")
+                                    Text("All series").tag("All series")
                                 }
-                            } label:{ Label(season.isEmpty ? "Series" : season,systemImage:"rectangle.stack").font(.system(size:23,weight:.medium)) }
+                            } label:{ Label(season.isEmpty ? "All series" : season,systemImage:"rectangle.stack").font(.system(size:23,weight:.medium)) }
                         }
                         Spacer()
-                    }.focusSection().padding(.horizontal,WatchDesign.inset)
+                    }.focusSection().padding(.horizontal,WatchDesign.inset).id("episode-list")
                     LazyVGrid(columns:columns,alignment:.leading,spacing:40) {
                         ForEach(episodes) { episode in
-                            Button { start(episode,resume:true) } label:{ EpisodeTile(episode:episode,programme:current) }.buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
+                            Button { start(episode,resume:true) } label:{ EpisodeTile(episode:episode,programme:current,showSeries:seasons.count>1 && (season=="All series" || season.isEmpty)) }.id(episode.id).focused($episodeFocus,equals:episode.id).buttonStyle(WatchCardButtonStyle()).focusEffectDisabled()
                         }
                     }.padding(.horizontal,WatchDesign.inset).padding(.top,12)
                 } else {
@@ -454,15 +472,22 @@ struct DetailView:View {
                         }.foregroundStyle(WatchDesign.muted).frame(width:380,alignment:.leading)
                     }.padding(.horizontal,WatchDesign.inset).padding(.top,8)
                 }
-                if let episode=(episodeCollection == nil ? current.preferred : collectionEpisodes.first(where:{($0.resumeSeconds ?? 0)>0})),(episode.resumeSeconds ?? 0)>0 {
-                    Button { start(episode,resume:false) } label:{ Label("Start over",systemImage:"backward.end").font(.system(size:23,weight:.medium)) }.padding(.horizontal,WatchDesign.inset)
-                }
                 if !current.film { SimilarShows(programme:current) }
             }.padding(.bottom,72)
         }.contentMargins(.horizontal,0,for:.scrollContent).ignoresSafeArea(.container,edges:.top).background(WatchDesign.canvas)
         .toolbarBackground(.hidden,for:.navigationBar,.tabBar)
-        .task { await library.refresh(); if season.isEmpty { season=seasons.first ?? "All episodes" } }
+        .task {
+            if !appliedInitialEpisode,let selectedEpisodeID,episodes.contains(where:{$0.id==selectedEpisodeID}) {
+                appliedInitialEpisode=true
+                await Task.yield()
+                scroll.scrollTo(selectedEpisodeID,anchor:.center)
+                await Task.yield()
+                episodeFocus=selectedEpisodeID
+            }
+            await library.refresh()
+        }
         .animation(reduceMotion ? nil : .easeInOut(duration:0.2),value:season)
+        }
         }.ignoresSafeArea(.container,edges:.top)
     }
     private func start(_ episode:Episode,resume:Bool) { library.deepPlay=PlaybackSelection(programme:current,episode:episode,position:resume ? episode.resumeSeconds ?? 0 : 0) }
@@ -548,12 +573,13 @@ struct ProgrammeDestination:View {
     @EnvironmentObject private var library:LibraryStore
     let programme:Programme
     var episodeCollection:String?=nil
+    var selectedEpisodeID:String?=nil
     @State private var resolved:Programme?
     @State private var error:String?
     var body:some View {
         Group {
-            if let current=resolved { DetailView(programme:current,episodeCollection:episodeCollection) }
-            else if programme.discoveryRef == nil { DetailView(programme:programme,episodeCollection:episodeCollection) }
+            if let current=resolved { DetailView(programme:current,episodeCollection:episodeCollection,selectedEpisodeID:selectedEpisodeID) }
+            else if programme.discoveryRef == nil { DetailView(programme:programme,episodeCollection:episodeCollection,selectedEpisodeID:selectedEpisodeID) }
             else {
                 WarmupScreen(programme:programme,status:error ?? "Finding episodes",failed:error != nil)
             }

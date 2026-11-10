@@ -11,14 +11,14 @@ Watch brings a shared television library to Apple TV, Home Assistant and Samsung
 
 This repository groups the existing components without changing the running installation. The server folder preserves the installed directory names and imports. Component READMEs describe their existing configuration and operation; paths and network addresses in examples reflect the original Pi installation and should be adapted for another host.
 
-## Latest updates · 7 November 2026
+## Latest updates · 10 November 2026
 
-- Apple TV build 63: cinematic heroes and themed shelves, portrait artwork, daily discovery rows, exact Christmas episode links, sidebar navigation that returns to each section’s root, and a new artwork-led Up next card.
+- Apple TV build 71: floating layered cards with focus enlargement and a moving sheen, upper-third hero crops, lighter browsing, and episode-first show pages. All series is the default; Continue Watching carries the clicked episode into the show screen. Episode metadata is simplified and the show-page Start over button is removed.
 - Playback: native controls, verified intro/recap skipping, automatic Up next, chronological QI lettered-series queues, and ahead-of-time credits analysis combining picture text with closing music. Autoplay waits for the episode to finish.
 - Scene lighting: live transport-menu controls for sample window, fade, saturation and brightness matching, neutral-to-white behaviour and optional look-ahead. Calibration and original lamp-state restoration are preserved.
 - Pi host: bounded, paired ending previews and analysis diagnostics, reviewed clear-logo matches, and the shared playback-feature APIs. Samsung and Home Assistant sources remain included alongside the host and tvOS app.
 
-See [build 63 release and validation notes](docs/RELEASE-2026-11-07.md), [credits detection](docs/VISUAL-CREDITS.md), [scene-lighting controls](docs/SCENE-LIGHTING-CONTROLS.md), [Apple TV notes](apple-tv/README.md), and the [playback API contract](docs/PLAYBACK-FEATURES-API.md).
+See [build 71 release and validation notes](docs/RELEASE-2026-11-10.md), [build 63 notes](docs/RELEASE-2026-11-07.md), [credits detection](docs/VISUAL-CREDITS.md), [scene-lighting controls](docs/SCENE-LIGHTING-CONTROLS.md), [Apple TV notes](apple-tv/README.md), and the [playback API contract](docs/PLAYBACK-FEATURES-API.md).
 
 BBC UHD uses the installation owner's privately provisioned setup; no client identity, private key or account session is included. The previous build-37 checkpoint is retained as `checkpoint-appletv-build-37`.
 

@@ -153,6 +153,16 @@ extension Episode {
         guard let duration=durationSeconds, duration>0, let resume=resumeSeconds, resume>0 else { return "Continue watching" }
         return "\(max(1,Int(ceil((duration-resume)/60)))) min remaining"
     }
+    func cardHeading(showSeries:Bool)->String {
+        var name=title.trimmingCharacters(in:.whitespacesAndNewlines)
+        let series=seasonTitle
+        if name.hasPrefix(series+": ") {name=String(name.dropFirst(series.count+2))}
+        let heading=episodeNumber.flatMap {$0>0 ? "Episode \($0)" : nil} ?? name
+        return showSeries && series != "Episodes" ? series+": "+heading : heading
+    }
+    var cardDetails:String {
+        [durationSeconds.flatMap {$0>0 ? "\(Int($0/60)) Min" : nil},uhdAvailable == true ? "UHD" : quality].compactMap{$0}.joined(separator:" • ")
+    }
     var compactCaption:String {
         [episodeNumber.map { "Episode \($0)" },durationText,uhdAvailable == true ? "UHD" : quality].compactMap { $0 }.joined(separator:" · ")
     }
@@ -219,6 +229,18 @@ struct EditorialShelf:Identifiable {
     let layout:Layout
     var episodeCollection:String?=nil
 }
+struct EpisodeDestination:Hashable {
+    let programmeID:String
+    let episodeID:String
+    var pathValue:String {"episode:"+(try! JSONEncoder().encode([programmeID,episodeID])).base64EncodedString()}
+    static func parse(_ value:String)->EpisodeDestination? {
+        guard value.hasPrefix("episode:"),value.count<4096,
+              let data=Data(base64Encoded:String(value.dropFirst(8))),
+              let ids=try? JSONDecoder().decode([String].self,from:data),ids.count==2,ids.allSatisfy({!$0.isEmpty}) else {return nil}
+        return EpisodeDestination(programmeID:ids[0],episodeID:ids[1])
+    }
+}
+
 struct CollectionDestination:Hashable {
     let programmeID:String
     let collection:String
