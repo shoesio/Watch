@@ -218,3 +218,74 @@ body[data-portrait-row="true"] .card .brands{left:58px}
 .card .meta{top:202px}
 .all-shows .card .meta{top:218px}
 .show-detail .card .cardSynopsis{height:42px}
+
+/* Cinematic browsing: full-width spotlight and virtual, artwork-led shelves. */
+#navigation{top:20px;left:140px;width:1000px;min-height:49px;height:auto;padding:3px 10px;text-align:center;background:rgba(28,28,31,.94);border-radius:29px;z-index:30}
+#navigation span{font-size:16px;line-height:23px;padding:7px 15px;border:0;margin:0 1px;color:#c1c2c7}
+#navigation span.active{background:#343438;color:#fff}
+#navigation span.focus{background:#f5f5f7;color:#141416}
+#navigation #nav7{right:6px;top:5px;max-width:175px;font-size:13px;padding:6px 12px;border-radius:19px;background:rgba(255,255,255,.06)}
+#navigation #nav7.focus{background:#fff;color:#111}
+.cinema #pageLabel{display:none}
+.cinema #hero,.cinema #heroControls,.cinema #cards,.cinema #footer{display:none!important}
+#cinema{position:absolute;left:0;top:0;width:1280px;height:720px;overflow:hidden;background:#08090b}
+#cinemaHero{position:absolute;left:0;top:0;width:1280px;height:485px;overflow:hidden}
+#cinemaHeroImage{position:absolute;left:0;top:0;width:1280px;height:480px;visibility:hidden}
+#cinemaHeroShade{position:absolute;left:0;top:0;width:100%;height:100%;background:-webkit-linear-gradient(left,rgba(0,0,0,.74),rgba(0,0,0,.45) 35%,rgba(0,0,0,0) 76%);background:linear-gradient(to right,rgba(0,0,0,.74),rgba(0,0,0,.45) 35%,rgba(0,0,0,0) 76%)}
+#cinemaHeroBottom{position:absolute;left:0;bottom:0;width:100%;height:165px;background:-webkit-linear-gradient(top,rgba(8,9,11,0),#08090b);background:linear-gradient(to bottom,rgba(8,9,11,0),#08090b)}
+#cinemaHeroCopy{position:absolute;left:64px;top:150px;width:520px}
+#cinemaHeroTitle{font-size:43px;line-height:47px;font-weight:700;margin:0 0 18px;width:510px;max-height:96px}
+#cinemaHeroLogo{display:none;width:auto;height:auto;max-width:490px;max-height:96px;margin-bottom:20px}
+#cinemaHeroBrands{height:26px;margin-bottom:11px}
+#cinemaHeroBrands .brandLogo{height:25px}
+#cinemaHeroDescription{font-size:18px;line-height:25px;max-height:50px;overflow:hidden;color:#e0e0e6;margin:0 0 15px;max-width:510px}
+#cinemaHeroCaption{font-size:13px;line-height:18px;color:#c3c4cc;max-height:18px;overflow:hidden;margin-bottom:16px}
+#cinemaHeroAction{display:inline-block;background:rgba(255,255,255,.17);border-radius:24px;padding:12px 23px;font-size:19px;line-height:22px;font-weight:700;color:white}
+#cinemaHeroAction.selected{background:#fff;color:#111;box-shadow:0 3px 10px rgba(0,0,0,.22)}
+#cinemaHeroCount{font-size:13px;margin-left:18px;color:#bbbcc4}
+#cinemaHeading{position:absolute;left:56px;top:85px;font-size:32px;line-height:38px;margin:0;font-weight:700}
+body[data-cinema-mode="hero"] #cinemaHeading{display:none}
+#cinemaRails{position:absolute;left:0;top:148px;width:1280px}
+body[data-cinema-mode="hero"] #cinemaRails{top:490px}
+.cinemaRail{position:relative;width:1280px;height:275px;padding:0 0 0 48px}
+.cinemaRail h2{font-size:25px;line-height:31px;margin:0 0 19px;font-weight:700;color:#f2f2f6}
+.cinemaRailCards{height:207px;white-space:nowrap}
+.cinemaRail.posters{height:412px}
+.cinemaRail.posters .cinemaRailCards{height:355px}
+.cinemaRail.preview{margin-top:18px}
+.cinemaRailCount{position:absolute;right:56px;top:8px;font-size:13px;color:#858895}
+.cinemaCard{position:relative;display:inline-block;vertical-align:top;width:280px;height:204px;margin:0 20px 0 0;white-space:normal;z-index:1}
+.cinemaSurface{position:relative;width:280px;height:157.5px;overflow:hidden;border-radius:11px;background:#191b21;box-shadow:0 3px 10px rgba(0,0,0,.22)}
+.cinemaPicture{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden}
+.cinemaPicture img{position:absolute;left:0;top:0;width:100%;height:100%;visibility:hidden}
+.cinemaCardShade{position:absolute;left:0;bottom:0;width:100%;height:75px;background:-webkit-linear-gradient(top,rgba(0,0,0,0),rgba(0,0,0,.8));background:linear-gradient(to bottom,rgba(0,0,0,0),rgba(0,0,0,.8))}
+.cinemaCaption{padding:12px 3px 0;height:38px;overflow:hidden}
+.cinemaCardTitle{font-size:16px;line-height:21px;color:#b7bac4;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.cinemaBrands{position:absolute;right:14px;bottom:22px;height:22px;line-height:22px;z-index:4}
+.cinemaBrands .brandLogo{height:20px;max-width:60px;margin-right:0;margin-left:6px}
+.cinemaCardInfo{position:absolute;left:15px;right:85px;bottom:29px;font-size:13px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f1f2f6;z-index:3}
+.cinemaCardLogo{position:absolute;left:16px;top:18px;max-width:145px;max-height:54px;z-index:3}
+.cinemaProgress{position:absolute;left:15px;right:15px;bottom:11px;height:3px;border-radius:2px;background:rgba(255,255,255,.34);overflow:hidden;z-index:4}
+.cinemaProgress div{height:3px;background:#fff}
+.cinemaCard.portrait{width:208px;height:355px;margin-right:32px}
+.portrait .cinemaSurface{width:208px;height:312px}
+.portrait .cinemaCardShade,.portrait .cinemaBrands{display:none}
+.portrait .cinemaCaption{padding-top:13px}
+.cinemaCard.focus{z-index:5}
+.cinemaCard.focus .cinemaCardTitle{color:#fff}
+.cinemaCard.focus .cinemaSurface{box-shadow:0 7px 24px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.35)}
+body[data-focus-motion="true"] .cinemaCard{-webkit-transition:-webkit-transform .14s ease;transition:transform .14s ease}
+body[data-focus-motion="true"] .cinemaCard.focus{-webkit-transform:translateY(-3px) scale(1.045);transform:translateY(-3px) scale(1.045)}
+body[data-focus-motion="true"] .cinemaCard.focus .cinemaBrands,body[data-focus-motion="true"] .cinemaCard.focus .cinemaCardLogo{-webkit-transform:translateY(-1px);transform:translateY(-1px)}
+body[data-focus-motion="false"] .cinemaCard.focus .cinemaSurface{box-shadow:0 0 0 2px #ddd}
+.cinemaLoading{font-size:18px;color:#8d909d;padding:30px 0}
+.show-detail #navigation,.film-detail #navigation{top:20px}
+.show-detail #hero{height:400px}
+.show-detail #heroText{top:95px}
+.show-detail #heroControls{top:330px}
+.show-detail #cards{top:400px;height:280px}
+.show-detail #footer{bottom:12px}
+@media(prefers-reduced-motion:reduce){body[data-focus-motion="true"] .cinemaCard,body[data-focus-motion="true"] .cinemaCard.focus,body[data-focus-motion="true"] .cinemaCard.focus .cinemaBrands,body[data-focus-motion="true"] .cinemaCard.focus .cinemaCardLogo{-webkit-transition:none;transition:none;-webkit-transform:none;transform:none}.cinemaCard.focus .cinemaSurface{box-shadow:0 0 0 2px #ddd}}
+#heroShade{background:-webkit-linear-gradient(left,rgba(9,10,13,.86),rgba(9,10,13,.65) 35%,rgba(9,10,13,0) 78%);background:linear-gradient(to right,rgba(9,10,13,.86),rgba(9,10,13,.65) 35%,rgba(9,10,13,0) 78%)}
+.cinema #navigation{left:190px;width:900px;padding-right:180px}
+.cinema[data-cinema-section="home"] #navigation{padding-right:10px}

@@ -52,8 +52,9 @@ def group_key(programme):
 
 
 from playback_adapter import PlaybackAdapter
+from cinema_browse import CinemaAdapter
 
-class Gateway(PlaybackAdapter):
+class Gateway(PlaybackAdapter,CinemaAdapter):
     def __init__(self, settings, bridge):
         self.settings, self.bridge = settings, bridge
         self.key = Path(settings['device_key_file']).read_text().strip()
@@ -767,6 +768,8 @@ class Gateway(PlaybackAdapter):
         app.router.add_get('/api/suggestions', self.browse_suggestions)
         app.router.add_post('/api/import', self.import_show)
         app.router.add_post('/api/favourite', self.favourite)
+        app.router.add_get('/api/cinema',self.cinema)
+        app.router.add_get('/api/cinema/shelf',self.cinema_shelf)
         app.router.add_get('/api/show/{group}',self.show_api)
         app.router.add_get('/api/episodes/{group}', self.episodes_api)
         app.router.add_get('/api/seasons/{group}', self.seasons_api)

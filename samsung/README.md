@@ -1,3 +1,9 @@
+## Cinematic browsing — Samsung 0.350
+
+Home, Shows and Films now use a wide spotlight, floating top navigation and lazy artwork shelves. Continue Watching, new episodes, recommendations, favourites, themed/provider rows and remaining discoveries stay accessible. Up/Down moves between shelves; Left/Right moves along them. Only the active and next visible rows are rendered, with genuine posters in portrait rows and landscape episode imagery elsewhere. Show pages retain exact episode focus, All series and explicit playback; films keep their detail page and live channels tune directly.
+
+The Pi installer offers 0.350. Synchronise from 192.168.0.146 and reopen Watch. See [scope, performance measurements, playback safety, detector investigation and verification](BUILD71-PARITY.md). Physical confirmation of this cinematic revision is pending; the previous groundwork was installed at 1080p.
+
 ## Apple TV build 71 parity — Samsung 0.340
 
 Show and film detail pages, All series with exact Continue Watching focus, cleaner episode metadata, upper-third hero crops, matched portrait artwork and restrained focus motion. Up next is now the compact full-artwork card with provider badge, episode details and Next episode/Exit; its countdown stays inside Next episode and autoplay waits for natural completion. QI W → X ordering is fixed. Existing playback and pairing remain intact.
