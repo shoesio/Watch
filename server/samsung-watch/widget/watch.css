@@ -301,3 +301,23 @@ body[data-focus-motion="false"] .cinemaCard.focus .cinemaSurface{box-shadow:0 0 
 #sectionTools #pageLabel{position:static;float:none;display:inline-block;right:auto;top:auto;font-size:13px;font-weight:400;line-height:21px;padding:7px 8px;color:#858b99;vertical-align:middle}
 .cinema #sectionTools #pageLabel{display:none}
 #seriesMenu,#genreMenu{top:126px;z-index:240}
+
+/* Hero photos fit a clipped frame below the menu; fades share its bottom edge. */
+#hero{background:#090a0d}
+#heroArt{position:absolute;left:0;top:64px;width:1280px;height:309.333px;overflow:hidden;z-index:0}
+.show-detail #heroArt{height:336px}
+.film-detail #heroArt{height:556px}
+body[data-portrait-row="true"] #heroArt{height:176px}
+#heroArt #heroImage{z-index:0}
+#heroArt #heroShade{left:0;top:0;width:100%;height:100%;z-index:1}
+#heroBottom{left:0;bottom:0;width:100%;height:144px;z-index:2;background:-webkit-linear-gradient(top,rgba(9,10,13,0),#090a0d 88%,#090a0d);background:linear-gradient(to bottom,rgba(9,10,13,0),#090a0d 88%,#090a0d)}
+#heroBottom:after{content:'';position:absolute;left:0;bottom:0;width:100%;height:14px;background:#090a0d}
+#heroText{z-index:3}
+.live-browse #heroText{top:124px}
+#cinemaHero{background:#08090b}
+#cinemaHeroArt{position:absolute;left:0;top:64px;width:1280px;height:421px;overflow:hidden;z-index:0}
+#cinemaHeroArt #cinemaHeroImage{z-index:0}
+#cinemaHeroArt #cinemaHeroShade{left:0;top:0;width:100%;height:100%;z-index:1}
+#cinemaHeroBottom{left:0;bottom:0;width:100%;height:170px;z-index:2;background:-webkit-linear-gradient(top,rgba(8,9,11,0),#08090b 88%,#08090b);background:linear-gradient(to bottom,rgba(8,9,11,0),#08090b 88%,#08090b)}
+#cinemaHeroBottom:after{content:'';position:absolute;left:0;bottom:0;width:100%;height:14px;background:#08090b}
+#cinemaHeroCopy{z-index:3}

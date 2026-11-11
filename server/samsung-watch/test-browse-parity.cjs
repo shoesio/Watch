@@ -28,7 +28,7 @@ async function nav(id){await focusNav(w,press,id);press(13);await wait(30);}
 (async()=>{
  w.Watch.init();await wait(30);press(13);await wait(40);
  const hero=w.document.getElementById('heroImage');Object.defineProperty(hero,'naturalWidth',{value:1000});Object.defineProperty(hero,'naturalHeight',{value:1500});hero.onload();
- assert.ok(Math.abs(parseFloat(hero.style.top)+parseFloat(hero.style.height)/3-400/3)<1,'hero upper thirds align');
+ assert.ok(Math.abs(parseFloat(hero.style.top)+parseFloat(hero.style.height)/3-parseFloat(w.getComputedStyle(w.document.getElementById('heroArt')).height)/3)<1,'hero upper thirds align');
  assert.equal(w.getComputedStyle(w.document.querySelector('.picture')).height,'157.5px');
  assert.equal(prepares.length,0);assert.equal(w.document.body.className,'show-detail');assert.ok(w.document.getElementById('card3').className.includes('focus'));
  assert.equal(w.document.getElementById('nav17').textContent,'All series');assert.equal(w.document.getElementById('nav16').textContent,'Choose episode');

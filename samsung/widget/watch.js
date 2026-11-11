@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.351', seekTransition = false;
+ var buildVersion = '0.352', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -107,6 +107,8 @@ var Watch = (function () {
    } else { logo.style.display = logo._watchLoaded ? 'block' : 'none'; el('title').style.display = logo._watchLoaded ? 'none' : 'block'; }
   } else { logo._watchSource = ''; logo._watchLoaded = false; logo.onload = null; logo.onerror = null; logo.style.display = 'none'; el('title').style.display = 'block'; }
   var hero = el('heroImage'), frame = el('hero'), heroHeight=portraitRow ? 180:(group ? (group.film?465:300):280);
+  // Fit the photo to the visible frame below the 64px menu (48 logical units).
+  heroHeight=Math.max(1,heroHeight-48);
   var containHero=item && item.channel_brand && !(item.guide && item.guide.now && item.guide.now.art),heroWidth=containHero?520:960,heroLeft=containHero?440:0;
   var heroSource = artwork(item);
   var sameHeroSource=hero._watchSource===heroSource;
@@ -185,7 +187,7 @@ var Watch = (function () {
   if (busy) { return; }
   if (!group && tab === 1 && !browseMode) { browseMode='shows';browseSnapshot=''; }
   pageSize = !group && (tab === 1 || (tab === 3 && browseMode !== 'featured') || (browseMode && browseMode !== 'featured')) ? 8 : 4;
-  document.body.className = group ? (group.film ? 'film-detail' : 'show-detail') : (pageSize === 8 ? 'all-shows' : '');
+  document.body.className = group ? (group.film ? 'film-detail' : 'show-detail') : (tab===2 ? 'live-browse' : (pageSize === 8 ? 'all-shows' : ''));
   var mine = ++generation;
   if (group) { el('nav7').style.display = 'none'; }
   busy = true; message('Loading…');

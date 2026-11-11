@@ -27,9 +27,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--key-file', type=Path)
     p.add_argument('--base', default='http://192.168.0.146:8113')
-    p.add_argument('--output', type=Path, default=Path('SamsungWatch_0.351_Europe_20261111.zip'))
+    p.add_argument('--output', type=Path, default=Path('SamsungWatch_0.352_Europe_20261111.zip'))
     p.add_argument('--resolution', choices=['720','1080'], default='1080')
-    p.add_argument('--version', default='0.351')
+    p.add_argument('--version', default='0.352')
     args = p.parse_args()
     root = Path(__file__).resolve().parent / 'widget'
     icons(root)

@@ -1,3 +1,9 @@
+## Hero crop, fade and live information — Samsung 0.352
+
+Hero photos now sit in an explicitly clipped area below the fixed top menu. Both the cinematic spotlight and show/film/live heroes calculate their upper-third crop against this visible area. Their bottom fades share the exact lower image edge, sit above the photo in an explicit layer, and finish in a solid strip matching the page background. This prevents an oversized image or gradient-edge rounding from exposing a bright strip below the fade. Live channel branding and Now/Next copy start below the menu and contextual tools.
+
+The installer offers 0.352. Pairing, autostart, the confirmed 0.351 menu/focus behaviour and playback remain unchanged; no gateway restart is needed. Geometry and crop checks pass. Real-TV confirmation of the new crop, fade and live text remains pending.
+
 ## Navigation response and fixed menu — Samsung 0.351
 
 Left/Right within a loaded cinematic page now changes only the previous and next focused cards: no requests, body-class resets, hero/branding work or image rebuilds. Shelf/page changes reconcile only changed rows and keep an unchanged preview row attached. Hidden spotlight bitmaps are released. Native Orsay uses a restrained instant focus highlight instead of animated scaling; desktop preview can still use motion.

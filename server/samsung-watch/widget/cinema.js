@@ -41,7 +41,7 @@ var WatchCinema=(function(){
   text('cinemaHeroTitle',item.title);text('cinemaHeroDescription',item.description);text('cinemaHeroCaption',item.meta || '');
   host.brands(el('cinemaHeroBrands'),item.brands);
   var photo=el('cinemaHeroImage'),source=host.art(item);
-  if(photo._source!==source){photo._source=source;host.cover(photo,960,360,false,true);photo.src=source;}
+  if(photo._source!==source){photo._source=source;host.cover(photo,960,315.75,false,true);photo.src=source;}
   var logo=el('cinemaHeroLogo'),mark=item.show_logo,logoSource=mark && !item.artwork_contains_title ? host.logo(mark):'';
   if(logoSource){
    logo.onload=function(){logo.style.display='block';el('cinemaHeroTitle').style.display='none';};logo.onerror=function(){logo.style.display='none';el('cinemaHeroTitle').style.display='block';};
