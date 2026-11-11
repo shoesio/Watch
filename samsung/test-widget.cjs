@@ -30,6 +30,7 @@ for(const fn of ['SetDisplayArea','Stop','Play','Pause','Resume']) player[fn]=(.
 w.eval(fs.readFileSync(path.join(root,'watch.js'),'utf8'));
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
+const {focusNav}=require('./remote-test-helpers.cjs');
 (async()=>{
  w.Watch.init();await wait(20);
  assert.equal(w.document.querySelectorAll('.card').length,4);
@@ -66,9 +67,9 @@ const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
  // Right edge of the first row pages forwards; left edge pages back to the same row.
  press(38);for(let i=0;i<4;i++)press(39);await wait(20);assert.match(w.document.getElementById('pageLabel').textContent,/2 \/ 2/);
  press(37);await wait(20);assert.match(w.document.getElementById('pageLabel').textContent,/1 \/ 2/);assert.ok(w.document.getElementById('card3').className.includes('focus'));
- press(8);for(let i=0;i<8;i++)press(39);press(13);assert.equal(w.document.getElementById('genreMenu').style.display,'block');assert.equal(w.document.getElementById('genreHeading').textContent,'Filter shows');
+ await focusNav(w,press,7);press(13);assert.equal(w.document.getElementById('genreMenu').style.display,'block');assert.equal(w.document.getElementById('genreHeading').textContent,'Filter shows');
  press(40);press(13);await wait(20);assert.ok(calls.at(-1).url.includes('genre=Comedy'));
- press(8);press(39);press(13);await wait(20);assert.ok(calls.at(-1).url.includes('tab=3'));assert.ok(calls.at(-1).url.endsWith('genre='));
+ await focusNav(w,press,8);press(13);await wait(20);assert.ok(calls.at(-1).url.includes('tab=3'));assert.ok(calls.at(-1).url.endsWith('genre='));
  press(457);assert.equal(w.document.getElementById('credits').style.display,'block');press(8);assert.equal(w.document.getElementById('credits').style.display,'none');
  assert.equal(w.document.getElementById('nav1').textContent,'Shows');assert.equal(w.document.getElementById('brand'),null);assert.equal(w.document.getElementById('nav3'),null);assert.equal(w.document.getElementById('nav4'),null);assert.equal(w.document.getElementById('nav5'),null);assert.equal(w.document.getElementById('nav6'),null);assert.equal(w.document.getElementById('control0'),null);assert.equal(w.document.getElementById('control2'),null);
  w.Watch.shutdown();dom.window.close();

@@ -1,3 +1,11 @@
+## Navigation response and fixed menu — Samsung 0.351
+
+Left/Right within a loaded cinematic page now changes only the previous and next focused cards: no requests, body-class resets, hero/branding work or image rebuilds. Shelf/page changes reconcile only changed rows and keep an unchanged preview row attached. Hidden spotlight bitmaps are released. Native Orsay uses a restrained instant focus highlight instead of animated scaling; desktop preview can still use motion.
+
+The six primary sections occupy a fixed full-width top row on every screen, including Discover. Filters, Similar, Favourite and All series sit on a separate contextual row; their dialogs open below it. Up/Down moves between these rows and the content; Left/Right stays within its current row.
+
+The installer offers 0.351; synchronise from 192.168.0.146 and reopen Watch. Client checks cover the focus mutation budget and menu geometry. Real-TV response and layout confirmation remain pending. Playback, gateway services, pairing and startup profiles are unchanged.
+
 ## Cinematic browsing — Samsung 0.350
 
 Home, Shows and Films now use a wide spotlight, floating top navigation and lazy artwork shelves. Continue Watching, new episodes, recommendations, favourites, themed/provider rows and remaining discoveries stay accessible. Up/Down moves between shelves; Left/Right moves along them. Only the active and next visible rows are rendered, with genuine posters in portrait rows and landscape episode imagery elsewhere. Show pages retain exact episode focus, All series and explicit playback; films keep their detail page and live channels tune directly.

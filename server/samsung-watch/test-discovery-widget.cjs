@@ -19,6 +19,7 @@ w.XMLHttpRequest=function(){
 };
 w.eval(fs.readFileSync(path.join(root,'watch.js'),'utf8'));
 const wait=ms=>new Promise(r=>setTimeout(r,ms)),press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
+const {focusNav}=require('./remote-test-helpers.cjs');
 (async()=>{
  w.Watch.init();await wait(20);press(8);for(let i=0;i<4;i++)press(39);press(13);
  assert.equal(w.document.getElementById('searchMenu').style.display,'block');
@@ -27,10 +28,10 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms)),press=keyCode=>w.Watch.key({keyC
  delayImport=true;press(13);assert.equal(w.document.getElementById('shell').style.display,'none');assert.equal(w.document.getElementById('preloadPhoto').style.display,'block');assert.equal(w.document.getElementById('bufferSpinner').textContent,'');
  await wait(80);assert.equal(w.document.getElementById('shell').style.display,'block');assert.equal(w.document.getElementById('nav7').style.display,'none');
  assert.equal(w.document.getElementById('nav11').style.display,'');assert.equal(w.document.getElementById('nav12').style.display,'');
- press(38);for(let i=0;i<20;i++)press(39);press(37);press(37);press(13);await wait(15);assert.ok(calls.some(c=>c.url.endsWith('/api/favourite')&&JSON.parse(c.body).favourite));assert.equal(w.document.getElementById('nav12').textContent,'Unfavourite');
- press(37);press(13);await wait(25);assert.ok(calls.at(-1).url.includes('mode=related'));assert.equal(w.document.getElementById('nav7').style.display,'none');
- press(8);for(let i=0;i<20;i++)press(37);press(39);press(39);press(13);await wait(20);assert.equal(w.document.getElementById('nav13').style.display,'');
- press(8);for(let i=0;i<20;i++)press(39);press(37);press(13);await wait(20);assert.ok(calls.some(c=>c.url.includes('mode=featured')));assert.equal(w.document.body.className,'');
+ await focusNav(w,press,12);press(13);await wait(15);assert.ok(calls.some(c=>c.url.endsWith('/api/favourite')&&JSON.parse(c.body).favourite));assert.equal(w.document.getElementById('nav12').textContent,'Unfavourite');
+ await focusNav(w,press,11);press(13);await wait(25);assert.ok(calls.at(-1).url.includes('mode=related'));assert.equal(w.document.getElementById('nav7').style.display,'none');
+ await focusNav(w,press,8);press(13);await wait(20);assert.equal(w.document.getElementById('nav13').style.display,'');
+ await focusNav(w,press,13);press(13);await wait(20);assert.ok(calls.some(c=>c.url.includes('mode=featured')));assert.equal(w.document.body.className,'');
  assert.ok(!fs.readFileSync(path.join(root,'watch.css'),'utf8').includes('blur('));
  w.Watch.shutdown();dom.window.close();console.log('PASS: remote search keyboard, provider import, sharp preload, durable favourite action, Similar, Featured and section filters.');
 })().catch(e=>{console.error(e);dom.window.close();process.exitCode=1});

@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.350', seekTransition = false;
+ var buildVersion = '0.351', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -156,7 +156,7 @@ var Watch = (function () {
   text('pageLabel', (group ? (choosingSeason ? 'Series · ' : 'Episodes · ') : (browseMode === 'related' ? 'Similar · ' : (browseMode === 'featured' ? 'Featured · ' : ''))) + (total ? (page + 1) + ' / ' + Math.ceil(total / pageSize) : ''));
   focus = Math.max(0, Math.min(focus, rows.length - 1)); paint();
  }
- function activeNav() { return browseMode === 'shows' ? 1 : (browseMode === 'search' ? 9 : (browseMode === 'recommend' || browseMode === 'related' ? 10 : (browseMode === 'featured' ? 13 : (tab === 3 ? 8 : tab)))); }
+ function activeNav() { return browseMode === 'shows' ? 1 : (browseMode === 'search' ? 9 : (browseMode === 'recommend' || browseMode === 'related' ? 10 : (browseMode === 'featured' ? 8 : (tab === 3 ? 8 : tab)))); }
  function paint() {
   var i;
   for (i = 0; i < navOrder.length; i += 1) { var navId = navOrder[i]; el('nav' + navId).className = (navId === activeNav() && !group ? 'active ' : '') + (area === 'nav' && navId === nav ? 'focus' : ''); }
@@ -245,7 +245,26 @@ var Watch = (function () {
  }
  function paintGenres() { var box = el('genreChoices'), i, choice; box.innerHTML = ''; for (i = 0; i < genreChoices.length; i += 1) { choice = document.createElement('div'); choice.textContent = genreChoices[i]; choice.className = i === genreFocus ? 'selected' : ''; box.appendChild(choice); } if (box.children[genreFocus] && box.children[genreFocus].scrollIntoView) { box.children[genreFocus].scrollIntoView(false); } }
  function openGenres() { if (!genreChoices.length) { message('No genres are available in this section.'); return; } text('genreHeading', tab === 3 ? 'Filter films' : 'Filter shows'); genreFocus = Math.max(0, genreChoices.indexOf(genre || 'All genres')); el('genreMenu').style.display = 'block'; paintGenres(); }
- function moveNav(delta) { var order = [], index = 0, i; for (i = 0; i < navOrder.length; i += 1) { if (el('nav' + navOrder[i]).style.display !== 'none') { order.push(navOrder[i]); } } for (i = 0; i < order.length; i += 1) { if (order[i] === nav) { index = i; break; } } nav = order[Math.max(0, Math.min(order.length - 1, index + delta))]; }
+ function toolNav() { var choices=[17,7,11,12,13];for(var i=0;i<choices.length;i+=1) { if(el('nav'+choices[i]).style.display!=='none') { return choices[i]; } }return null; }
+ function moveNav(delta) {
+  var order=[],index=0,i,parent=el('nav'+nav).parentNode;
+  for(i=0;i<navOrder.length;i+=1) { var node=el('nav'+navOrder[i]);if(node.parentNode===parent && node.style.display!=='none') { order.push(navOrder[i]); } }
+  for(i=0;i<order.length;i+=1) { if(order[i]===nav) { index=i;break; } }
+  if(order.length) { nav=order[Math.max(0,Math.min(order.length-1,index+delta))]; }
+ }
+ function navDown() {
+  var parent=el('nav'+nav).parentNode.id,tool=toolNav();
+  if(parent==='navigation' && tool!==null) { nav=tool; }
+  else if(parent!=='heroControls' && el('heroControls').style.display!=='none') { nav=16; }
+  else { area='grid'; }
+ }
+ function navUp() {
+  var parent=el('nav'+nav).parentNode.id,tool=toolNav();
+  if(parent==='navigation') { return; }
+  if(parent==='heroControls' && tool!==null) { nav=tool; }
+  else { nav=activeNav(); }
+ }
+
 
  function changePage(delta) {
   var target = page + delta;
@@ -504,7 +523,7 @@ var Watch = (function () {
   }
   if(!playing && !busy && !recoveringView && typeof WatchCinema!=='undefined' && WatchCinema.active()) {
    var browseKey=(is('KEY_RETURN',10009)||k===8||k===27)?'back':is('KEY_UP',38)?'up':is('KEY_DOWN',40)?'down':is('KEY_LEFT',37)?'left':is('KEY_RIGHT',39)?'right':is('KEY_ENTER',13)?'ok':is('KEY_PLAY',415)?'play':is('KEY_FF',417)?'pageRight':is('KEY_RW',412)?'pageLeft':'';
-   if(area==='nav' && browseKey==='down') { area='grid';WatchCinema.enter();paint();return false; }
+   if(area==='nav' && browseKey==='down') { navDown();if(area==='grid') { WatchCinema.enter(); }paint();return false; }
    if(browseKey && WatchCinema.key(browseKey)) { return false; }
   }
   if (is('KEY_RETURN', 10009) || k === 8 || k === 27) { back(); return false; }
@@ -542,14 +561,13 @@ var Watch = (function () {
   if (is('KEY_PLAY',415) && !group && rows[focus] && !rows[focus].live) { openShow(rows[focus]);return false; }
   if (is('KEY_ENTER', 13) || is('KEY_PLAY', 415)) { select(); return false; }
   if (is('KEY_UP', 38)) {
-   if (area === 'nav' && el('heroControls').style.display !== 'none') { nav = 16; }
+   if (area === 'nav') { navUp(); }
    else if (area === 'grid' && focus >= 4) { focus -= 4; }
    else if (area === 'grid' && page > 0) { loadPage(page - 1, pageSize - 4 + focus); }
-   else if (area === 'grid') { area = 'nav'; nav = !group ? activeNav() : (tab === 3 ? 8 : tab); }
+   else if (area === 'grid') { area='nav';nav=el('heroControls').style.display!=='none'?16:(toolNav()!==null?toolNav():activeNav()); }
   }
   else if (is('KEY_DOWN', 40)) {
-   if (area === 'nav' && (nav===14 || nav===15 || nav===16)) { nav=0; }
-   else if (area === 'nav') { area = 'grid'; }
+   if (area === 'nav') { navDown(); }
    else if (focus + 4 < rows.length) { focus += 4; }
    else if (page + 1 < Math.ceil(total / pageSize)) { loadPage(page + 1, focus % 4); }
   }
@@ -570,7 +588,8 @@ var Watch = (function () {
  function init() {
   text('appVersion', 'Watch ' + buildVersion);
   var motion=!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches), supportsTransform='webkitTransform' in document.body.style || 'transform' in document.body.style;
-  document.body.setAttribute('data-focus-motion',motion && supportsTransform ? 'true':'false');
+  var nativeTV=typeof Common!=='undefined' && Common.API && Common.API.Widget;
+  document.body.setAttribute('data-focus-motion',motion && supportsTransform && !nativeTV ? 'true':'false');
   if (typeof Common !== 'undefined') { api = new Common.API.Widget(); keys = new Common.API.TVKeyValue(); }
   player = el('player');
   if(typeof WatchCinema!=='undefined') { WatchCinema.init({request:request,image:image,art:artwork,cover:cover,brands:branding,

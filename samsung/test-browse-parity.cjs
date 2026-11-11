@@ -23,7 +23,8 @@ w.XMLHttpRequest=function(){this.open=(method,url)=>{this.method=method;this.url
  }};
 for(const name of ['Play','Pause','Stop','Resume','SetDisplayArea'])w.document.getElementById('player')[name]=()=>1;
 w.eval(fs.readFileSync(path.join(__dirname,'widget/watch.js'),'utf8'));const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
-async function nav(id){for(let i=0;i<12&&!w.document.querySelector('#navigation .focus,#heroControls .focus');i++){press(38);await wait(10);}for(let i=0;i<22;i++)press(37);for(let i=0;i<22&&!w.document.getElementById('nav'+id).className.includes('focus');i++)press(39);assert.ok(w.document.getElementById('nav'+id).className.includes('focus'),'remote can reach nav '+id);press(13);await wait(30);}
+const {focusNav}=require('./remote-test-helpers.cjs');
+async function nav(id){await focusNav(w,press,id);press(13);await wait(30);}
 (async()=>{
  w.Watch.init();await wait(30);press(13);await wait(40);
  const hero=w.document.getElementById('heroImage');Object.defineProperty(hero,'naturalWidth',{value:1000});Object.defineProperty(hero,'naturalHeight',{value:1500});hero.onload();

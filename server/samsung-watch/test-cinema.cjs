@@ -17,9 +17,10 @@ const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
 (async()=>{
  w.Watch.init();await wait(40);assert.equal(w.document.body.className,'cinema');assert.equal(w.document.body.getAttribute('data-cinema-mode'),'hero');assert.equal(w.document.querySelectorAll('.cinemaRail').length,1);
  assert.equal(calls.filter(c=>c.startsWith('/api/cinema/shelf')).length,1,'only visible shelf fetched');assert.equal(w.document.getElementById('cinemaHeroAction').textContent,'Choose episode');
+ press(13);await wait(30);press(8);await wait(40);assert.equal(w.document.getElementById('cinemaHero').style.display,'block','cached hero remains visible after returning to Home');
  press(40);await wait(30);assert.equal(w.document.body.getAttribute('data-cinema-mode'),'rows');assert.equal(w.document.querySelectorAll('.cinemaRail').length,2);assert.equal(w.document.querySelectorAll('.cinemaCard').length,9);
- assert.ok(w.document.querySelector('.cinemaCard.focus'));
- const existing=w.document.querySelector('.cinemaSurface');press(39);assert.equal(w.document.querySelector('.cinemaSurface'),existing,'focus reuses artwork surfaces');
+ assert.ok(w.document.querySelector('.cinemaCard.focus'));assert.equal(w.document.body.getAttribute('data-focus-motion'),'false','native Orsay uses instant static focus');
+ const existing=w.document.querySelector('.cinemaSurface');const requests=calls.length;const mutations=new w.MutationObserver(()=>{});mutations.observe(w.document.getElementById('shell'),{attributes:true,childList:true,subtree:true});press(39);const changed=mutations.takeRecords();mutations.disconnect();assert.equal(calls.length,requests,'within-page focus makes no requests');assert.equal(changed.length,2,'only the previous and next focus attributes change');assert.ok(changed.every(m=>m.type==='attributes'&&m.attributeName==='class'&&m.target.className.includes('cinemaCard'))); assert.equal(w.document.querySelector('.cinemaSurface'),existing,'focus reuses artwork surfaces');
  for(let i=0;i<4;i++)press(39);await wait(25);assert.ok(calls.some(c=>c.includes('id=continue&page=1')));assert.equal(prepares.length,0);
  press(40);await wait(25);assert.equal(w.document.querySelector('.cinemaRail').className.includes('posters'),true);assert.ok(w.document.querySelectorAll('.cinemaRail').length<=2);
  press(13);await wait(30);assert.equal(w.document.body.className,'show-detail');assert.equal(prepares.length,0);assert.ok(calls.some(c=>c.includes('focus_episode=ep0')));

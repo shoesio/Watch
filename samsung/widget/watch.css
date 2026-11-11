@@ -289,3 +289,15 @@ body[data-focus-motion="false"] .cinemaCard.focus .cinemaSurface{box-shadow:0 0 
 #heroShade{background:-webkit-linear-gradient(left,rgba(9,10,13,.86),rgba(9,10,13,.65) 35%,rgba(9,10,13,0) 78%);background:linear-gradient(to right,rgba(9,10,13,.86),rgba(9,10,13,.65) 35%,rgba(9,10,13,0) 78%)}
 .cinema #navigation{left:190px;width:900px;padding-right:180px}
 .cinema[data-cinema-section="home"] #navigation{padding-right:10px}
+
+/* The native TV uses instant, restrained focus rather than animated resampling. */
+body[data-focus-motion="false"] .cinemaCard.focus .cinemaSurface{box-shadow:0 0 0 1.5px rgba(245,245,248,.72)}
+/* One fixed primary bar on every screen; contextual tools are a separate row. */
+#shell #navigation{position:absolute;left:0;top:0;width:1280px;height:64px;min-height:64px;padding:12px 48px;margin:0;border-radius:0;background:#17181c;text-align:left;white-space:nowrap;z-index:40}
+#shell #navigation span{display:inline-block;font-size:17px;line-height:24px;padding:8px 18px;margin:0 5px 0 0;border:0;border-radius:20px;vertical-align:middle}
+#sectionTools{position:absolute;right:48px;top:82px;max-width:760px;height:36px;white-space:nowrap;text-align:right;z-index:35}
+#sectionTools span{display:inline-block;margin-left:8px;padding:7px 14px;font-size:15px;line-height:21px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:rgba(20,22,28,.9);color:#d1d4dc;vertical-align:middle;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+#sectionTools span.focus{background:#fff;color:#111;border-color:transparent}
+#sectionTools #pageLabel{position:static;float:none;display:inline-block;right:auto;top:auto;font-size:13px;font-weight:400;line-height:21px;padding:7px 8px;color:#858b99;vertical-align:middle}
+.cinema #sectionTools #pageLabel{display:none}
+#seriesMenu,#genreMenu{top:126px;z-index:240}
