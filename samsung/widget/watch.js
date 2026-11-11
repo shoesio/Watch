@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.353', seekTransition = false;
+ var buildVersion = '0.354', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -64,15 +64,15 @@ var Watch = (function () {
   try { x.send(data ? JSON.stringify(data) : null); } catch (e) { finish('Cannot connect to the Pi.'); }
  }
  function image(id, variant) { if (WATCH_CONNECTION.key === 'SET_DURING_PI_PACKAGING') { return id || 'images/backdrop.png'; } return id ? WATCH_CONNECTION.base + '/art/' + encodeURIComponent(id) + '?key=' + encodeURIComponent(WATCH_CONNECTION.key) + (variant === 'thumb' || variant === 'poster' || variant === 'card' ? '&size='+variant : '') : 'images/backdrop.png'; }
- function cover(img, width, height, contain, upperThird) {
-  width = width * renderScale; height = height * renderScale;
-  img.style.visibility = 'hidden'; img.style.width = Math.ceil(width) + 'px'; img.style.height = Math.ceil(height) + 'px'; img.style.left = '0px'; img.style.top = '0px';
+ function cover(img, width, height, contain, upperThird, topInset) {
+  width = width * renderScale; height = height * renderScale;var inset=(Number(topInset)||0)*renderScale;
+  img.style.visibility = 'hidden'; img.style.width = Math.ceil(width) + 'px'; img.style.height = Math.ceil(height) + 'px'; img.style.left = '0px'; img.style.top = Math.round(inset)+'px';
   function fit() {
    var w = img.naturalWidth, h = img.naturalHeight, scale;
    if (!w || !h) { return; }
    scale = contain ? Math.min(width / w, height / h) : Math.max(width / w, height / h);
    img.style.width = Math.ceil(w * scale) + 'px'; img.style.height = Math.ceil(h * scale) + 'px';
-   img.style.left = Math.round((width - w * scale) / 2) + 'px'; img.style.top = Math.round((height - h * scale) / (upperThird ? 3 : 2)) + 'px'; img.style.visibility = 'visible';
+   img.style.left = Math.round((width - w * scale) / 2) + 'px'; img.style.top = Math.round(inset+(height - h * scale) / (upperThird ? 3 : 2)) + 'px'; img.style.visibility = 'visible';
   }
   img.onload = fit; if (img.complete) { fit(); }
  }
@@ -117,14 +117,14 @@ var Watch = (function () {
   var sameHeroSource=hero._watchSource===heroSource;
   if(sameHeroSource && hero._watchHeight===heroHeight && hero._watchWidth===heroWidth) { return; }
   hero._watchHeight=heroHeight;hero._watchWidth=heroWidth;
-  hero.style.width = Math.ceil(heroWidth*renderScale)+'px';hero.style.height=Math.ceil(heroHeight*renderScale)+'px';hero.style.left=Math.ceil(heroLeft*renderScale)+'px';hero.style.top='0px';
+  hero.style.width = Math.ceil(heroWidth*renderScale)+'px';hero.style.height=Math.ceil(heroHeight*renderScale)+'px';hero.style.left=Math.ceil(heroLeft*renderScale)+'px';hero.style.top=Math.round(48*renderScale)+'px';
   hero._watchSource = heroSource; hero.style.visibility = 'hidden';
   hero.onload = function () {
    var w = hero.naturalWidth, h = hero.naturalHeight, scale;
    if (!w || !h) { return; }
    scale=containHero?Math.min(heroWidth/w,heroHeight/h):Math.max(heroWidth/w,heroHeight/h);
    hero.style.width = Math.ceil(w * scale * renderScale) + 'px'; hero.style.height = Math.ceil(h * scale * renderScale) + 'px';
-   hero.style.left = Math.round((heroLeft + (heroWidth - w * scale) / 2) * renderScale) + 'px'; hero.style.top = Math.round((heroHeight - h * scale) / 3 * renderScale) + 'px'; hero.style.visibility = 'visible';
+   hero.style.left = Math.round((heroLeft + (heroWidth - w * scale) / 2) * renderScale) + 'px'; hero.style.top = Math.round((48+(heroHeight - h * scale) / 3) * renderScale) + 'px'; hero.style.visibility = 'visible';
   };
   hero.onerror = function () { hero.style.visibility = 'hidden'; };
   if(!sameHeroSource) { hero.src = heroSource; }

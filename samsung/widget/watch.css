@@ -328,3 +328,10 @@ body[data-portrait-row="true"] #heroArt{height:176px}
 .live-browse #eyebrow{display:none}
 
 .cinemaCard.live .cinemaCardInfo{right:110px}
+/* Translucent navigation overlays decorative artwork; visible crops still anchor below it. */
+#shell #navigation{background:rgba(23,24,28,.82)}
+#heroArt{top:0;height:373.333px}
+.show-detail #heroArt{height:400px}
+.film-detail #heroArt{height:620px}
+body[data-portrait-row="true"] #heroArt{height:240px}
+#cinemaHeroArt{top:0;height:485px}

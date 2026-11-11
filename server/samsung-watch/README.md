@@ -1,3 +1,9 @@
+## Translucent top menu — Samsung 0.354
+
+The fixed menu now uses a semi-transparent dark background over the decorative top portion of the hero picture. The image's existing position below the menu is preserved: crop fitting still uses the visible region below the menu and adds the menu inset when positioning the single image inside its full clipped frame. Titles, channel information, contextual tools and episode cards stay clear of navigation. Bottom fade edges and the solid tail remain unchanged. No extra background image, blur or focus animation is introduced.
+
+This includes the 0.353 channel-only live branding and simpler series headers. The installer offers 0.354; synchronise from 192.168.0.146 and reopen Watch. Client checks pass; physical appearance confirmation is pending.
+
 ## Live-channel branding and simpler series headers — Samsung 0.353
 
 Live channel selection, cinematic live cards, loading and playback/pause now show the selected channel mark only, with no provider badge or secondary show logo. Series pages omit the redundant eyebrow (repeated show/provider/count) and Choose episode action; their episode cards remain directly focused/selectable. Film Play and spotlight navigation actions are retained. The selected-channel name remains available as text/alt text.
