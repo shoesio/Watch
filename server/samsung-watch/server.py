@@ -27,7 +27,7 @@ from tmdb_logos import sync as sync_logos, is_film
 from library_browse import genres, episode_order, natural
 from episode_versions import versions, QualityStore, seconds
 
-ART_HOSTS = {'ichef.bbci.co.uk', 'ic.c4assets.com', 'uktv-res.cloudinary.com', 'api-images.channel5.com','ovp.itv.com'}
+ART_HOSTS = {'ichef.bbci.co.uk', 'ic.c4assets.com', 'uktv-res.cloudinary.com', 'api-images.channel5.com','ovp.itv.com','image.tmdb.org'}
 LIVE_ORDER = {'bbc one':1,'bbc two':2,'channel 4':3,'bbc four':4,'e4':5,'more4':6,'film4':7,'4seven':8,'bbc news':9}
 CHANNEL_ART = {'bbc one':'bbcone','bbc two':'bbctwo','bbc four':'bbcfour','bbc news':'bbcnews',
                'channel 4':'channel4','e4':'e4','more4':'more4','film4':'film4','4seven':'4seven'}
@@ -61,6 +61,9 @@ class Gateway(PlaybackAdapter):
             raise ValueError('Generate a random device key before starting.')
         self.art = {}
         self.images = collections.OrderedDict()
+        self.image_jobs = {}
+        from browse_presentation import MatchedArtwork
+        self.matched_artwork = MatchedArtwork(Path(settings["device_key_file"]).parent)
         self.jobs = {}
         self.current_job = None
         self.current_ticket = None
@@ -134,6 +137,7 @@ class Gateway(PlaybackAdapter):
                     'title': p['title'], 'description': p.get('description', ''),
                     'image': self.art_id(p.get('artwork')), 'hero': self.art_id(p.get('hero') or p.get('artwork')),
                     'live': bool(p.get('live') or all(e.get('live') for e in episodes)),
+                    'artwork_contains_title':p.get('hero_contains_title',p.get('artwork_contains_title')) is True,
                     'recent': False, 'favourite': False, 'film': is_film(p), 'genres': [], '_providers': [], '_episodes': []}
             item = grouped[key]
             item['genres'] = sorted(set(item['genres'] + genres([p.get('genre', '')] + logo_meta.get(item['id'], {}).get('genres', []))))
@@ -186,6 +190,11 @@ class Gateway(PlaybackAdapter):
                 if item['guide'].get('now',{}):
                     item['guide']['now']['art'] = self.art_id(item['guide']['now'].get('image'))
         result=list(grouped.values())
+        for item in result:
+            matched=self.matched_artwork.get(item['id'],item.get('film'))
+            for kind,url in matched.items():
+                if url:item[kind]=self.art_id(url)
+            if item.get('card_artwork'):item['hero']=item['card_artwork'];item['artwork_contains_title']=False
         for item in result:
             if item['id'] in self.favourites:item['favourite']=self.favourites[item['id']]
         from live_availability import on_air_channels
@@ -344,21 +353,40 @@ class Gateway(PlaybackAdapter):
         page = min(page, max(0, (len(items) - 1) // size))
         return web.json_response({'page': page, 'total': len(items), 'items': items[page * size:page * size + size], **extra})
 
+    async def show_api(self,request):
+        group=next((p for p in self.library() if p['id']==request.match_info['group']),None)
+        if not group:raise web.HTTPNotFound()
+        return web.json_response(self.public(group))
+
     async def episodes_api(self, request):
         group = next((p for p in self.library() if p['id'] == request.match_info['group']), None)
         if not group:
             raise web.HTTPNotFound()
-        items = []
-        for episode, provider in sorted(group['_episodes'], key=lambda pair: episode_order(pair[0]), reverse=True):
-            selected = request.query.get('season', 'all')
-            if selected != 'all' and self.season_id(episode) != selected:
-                continue
-            items.append({k: episode[k] for k in ('id', 'title', 'description', 'live') if k in episode} |
-                {'show_logo':group.get('show_logo'), 'show_title':group['title'],
-                 'resume_seconds': self.version_resume(episode['id']), 'progress':min(100,self.progress_record(episode['id']).get('position',0)/seconds(episode.get('duration_seconds'))*100) if seconds(episode.get('duration_seconds')) else 0, 'duration_seconds': seconds(episode.get('duration_seconds', 0)),
-                 'brands': provider_brands([provider]), 'image': self.art_id(episode.get('thumbnail')), 'meta': ' · '.join(filter(None,
-                    [('Resume %d:%02d' % (self.version_resume(episode['id']) // 60, self.version_resume(episode['id']) % 60)) if self.version_resume(episode['id']) else '', provider, episode.get('duration_label'), 'Recently watched' if episode.get('recent') else '']))})
-        return self.page(request, items)
+        from browse_presentation import episode_heading,episode_caption
+        selected=request.query.get('season','all')
+        seasons={str(e.get('season') or '') for e,_ in group['_episodes']}
+        mixed=selected=='all' and len(seasons)>1
+        items=[]
+        for episode,provider in sorted(group['_episodes'],key=lambda pair:episode_order(pair[0]),reverse=True):
+            if selected!='all' and self.season_id(episode)!=selected:continue
+            duration=seconds(episode.get('duration_seconds'))
+            measured=self.quality.records.get(episode['id'],{})
+            if not measured:
+                version=next((v for v in group['_versions'] if v['id']==episode['id']),None)
+                if version:measured=self.quality.records.get(self.quality.preferred(version)[0]['id'],{})
+            quality=('HD' if measured['height']>=720 else 'SD') if measured.get('height') else (episode.get('quality') if episode.get('quality') in ('SD','HD') else None)
+            record=self.progress_record(episode['id'])
+            items.append({k:episode[k] for k in ('id','title','description','live','season','episode_number') if k in episode} |
+                {'display_title':episode_heading(episode,mixed),'show_logo':group.get('show_logo'),'show_title':group['title'],
+                 'resume_seconds':self.version_resume(episode['id']),'progress':min(100,record.get('position',0)/duration*100) if duration else 0,
+                 'duration_seconds':duration,'quality':quality,'brands':provider_brands([provider]),
+                 'image':self.art_id(episode.get('thumbnail')),'meta':episode_caption(duration,quality)})
+        focus_id=request.query.get('focus_episode')
+        focused=next((i for i,e in enumerate(items) if e['id']==focus_id),None)
+        if focused is not None:
+            size=4 if request.query.get('size')=='4' else 8
+            request=request.clone(rel_url=request.rel_url.update_query(page=str(focused//size)))
+        return self.page(request,items,focus_index=focused% (4 if request.query.get('size')=='4' else 8) if focused is not None else None,series_count=len(seasons))
 
     def find_version(self, ident):
         for group in self.library():
@@ -396,7 +424,7 @@ class Gateway(PlaybackAdapter):
             seasons[key]['_count'] += 1
             if provider not in seasons[key]['_providers']:
                 seasons[key]['_providers'].append(provider)
-        items = [{'id': 'all', 'title': 'All episodes', 'image': group['image'], 'brands': group['brands'],
+        items = [{'id': 'all', 'title': 'All series', 'image': group['image'], 'brands': group['brands'],
                   'description': group['description'], 'meta': group['meta']}]
         for season in seasons.values():
             season['brands'] = provider_brands(season['_providers'])
@@ -612,7 +640,12 @@ class Gateway(PlaybackAdapter):
             image = Image.new('RGB', (640, 360), '#23394c')
             ImageDraw.Draw(image).text((35, 160), 'WATCH  /  LIVE TV', fill='#9cffe3')
         image = image.convert('RGB')
-        if variant == 'thumb':
+        if variant == 'poster':
+            if image.width/image.height>=0.85:raise ValueError('Not portrait artwork')
+            image.thumbnail((360,540),resample=Image.Resampling.LANCZOS)
+        elif variant == 'card':
+            image=ImageOps.fit(image,(960,540),method=Image.Resampling.LANCZOS)
+        elif variant == 'thumb':
             image = ImageOps.fit(image, (480, 270), method=Image.Resampling.LANCZOS)
         else:
             image.thumbnail((1280, 720), Image.Resampling.LANCZOS)
@@ -626,13 +659,16 @@ class Gateway(PlaybackAdapter):
     async def artwork(self, request):
         if request.match_info['image'] not in self.art:
             self.library()
-        try:
-            if request.query.get('size') == 'thumb':
-                data = await asyncio.to_thread(self.get_image, request.match_info['image'], 'thumb')
-            else:
-                data = await asyncio.to_thread(self.get_image, request.match_info['image'])
-        except Exception:
-            raise web.HTTPNotFound()
+        variant=request.query.get('size','hero')
+        if variant not in ('thumb','poster','card'):variant='hero'
+        key=request.match_info['image']+':'+variant
+        task=self.image_jobs.get(key)
+        if task is None:
+            task=asyncio.create_task(asyncio.to_thread(self.get_image,request.match_info['image'],variant))
+            self.image_jobs[key]=task
+            task.add_done_callback(lambda done:self.image_jobs.pop(key,None))
+        try:data=await asyncio.shield(task)
+        except Exception:raise web.HTTPNotFound()
         return web.Response(body=data, content_type='image/jpeg', headers={'Cache-Control': 'private, max-age=1800'})
 
     async def show_logo(self, request):
@@ -731,6 +767,7 @@ class Gateway(PlaybackAdapter):
         app.router.add_get('/api/suggestions', self.browse_suggestions)
         app.router.add_post('/api/import', self.import_show)
         app.router.add_post('/api/favourite', self.favourite)
+        app.router.add_get('/api/show/{group}',self.show_api)
         app.router.add_get('/api/episodes/{group}', self.episodes_api)
         app.router.add_get('/api/seasons/{group}', self.seasons_api)
         app.router.add_post('/api/prepare', self.prepare)

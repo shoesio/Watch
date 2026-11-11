@@ -3,10 +3,12 @@ var WatchExtras = (function () {
  'use strict';
  var host, epoch=0, active=null, features=null, queue=null, next=null, enabled=false;
  var focus=-1, chapter=-1, buttons=[], timer=null, countdown=0, completed=false, queueBusy=false;
+ var offered=false, dismissed=false, cardFocus=-1, actionSignature='', cardSignature='', autoplayCancelled=false;
  function el(id) { return document.getElementById(id); }
  function label(id,value) { el(id).textContent=value || ''; }
  function cancel() {
   epoch+=1; countdown=0;clearTimeout(timer); timer=null; active=null; features=null; queue=null; next=null;
+  offered=false;dismissed=false;cardFocus=-1;actionSignature='';cardSignature='';autoplayCancelled=false;
   enabled=false; focus=-1; chapter=-1; buttons=[]; completed=false; queueBusy=false;
   el('playback').setAttribute('data-up-next','false');label('featureHint','');el('playbackHelp').setAttribute('data-extra-focus','false');el('featureActions').innerHTML='';el('chapterMenu').style.display='none';el('upNextCard').style.display='none';
  }
@@ -30,7 +32,8 @@ var WatchExtras = (function () {
    features=null;
    if (status===409 && retry) { getFeatures(false);return; }
    if (!err && matches(data) && data.status==='available') {
-    features={chapters:valid(data.chapters,false),skip_markers:valid(data.skip_markers,true)};
+    features={chapters:valid(data.chapters,false),skip_markers:valid(data.skip_markers,true),credits:valid(data.credits,false)};
+    features.credits=features.credits.concat(features.chapters.filter(function (c) { return c.kind==='credits' || c.kind==='end_credits'; }));
     if (m.provider==='BBC iPlayer' && !m.version_id) { features=null; }
    }paint();
   });
@@ -67,28 +70,46 @@ var WatchExtras = (function () {
   for(i=0;i<features.skip_markers.length;i+=1) { m=features.skip_markers[i];if (m.start<=p && p<m.end) { return m; } }return null;
  }
  function card() {
-  var show=!!next && (completed || (focus>=0 && buttons[focus] && /^(next|autoplay)$/.test(buttons[focus].id)));
-  el('playback').setAttribute('data-up-next',show?'true':'false');
+  var state=host.state(),duration=Number(active && active.duration_seconds)||0,verified=features?features.credits:[],cue=false,i;
+  if(next && !completed && !dismissed && state.playing && !state.paused && !state.waiting && !state.timeline) {
+   for(i=0;i<verified.length;i+=1) { if(verified[i].start<=state.position && state.position<verified[i].end) { cue=true; } }
+   if(!verified.length && duration>10 && state.position>=duration-10 && state.position<duration) { cue=true; }
+   if(cue && !offered) { offered=true;cardFocus=0; }
+  }
+  var show=!!next && !dismissed && (completed || offered) && (completed || (!state.paused && !state.waiting));
   el('upNextCard').style.display=show?'block':'none';if(!show) { return; }
-  label('upNextHeading',countdown>0?'Up next in '+countdown+' seconds':'Up next');
-  label('upNextShow',next.show_title || '');label('upNextTitle',next.title);
-  label('upNextDetails',(next.season?'Series '+next.season+' · ':'')+(next.episode_number?'Episode '+next.episode_number:''));
-  var img=el('upNextImage'),src=host.image(next.thumbnail || next.artwork,'thumb');if(img.getAttribute('src')!==src) { img.src=src; }
+  var reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  countdown=!completed && !autoplayCancelled && queue && queue.autoplay && !reduced && duration-state.position<=10 ? Math.max(0,Math.ceil(duration-state.position)) : 0;
+  var signature=[next.id,cardFocus,countdown,completed].join(':');if(signature===cardSignature) { return; }cardSignature=signature;
+  label('upNextHeading','UP NEXT');label('upNextShow',next.show_title || '');
+  var title=String(next.title || '').replace(/^(?:Series|Season)\s+[^:]+:\s*/i,'').replace(/^\d+\.\s*/, '');
+  label('upNextTitle',title);
+  var season=String(next.season || ''),parts=[];if(season) { parts.push(/^Series\s/i.test(season)?season:'Series '+season); }
+  if(next.episode_number) { parts.push('Episode '+next.episode_number); }
+  if(Number(next.duration_seconds)>0) { parts.push(Math.floor(Number(next.duration_seconds)/60)+' Min'); }
+  label('upNextDetails',parts.join(' • '));
+  label('upNextPlay','Next episode'+(countdown>0?'  ·  '+countdown:''));label('upNextExit','Exit');
+  el('upNextPlay').className=cardFocus===0?'selected':'';el('upNextExit').className=cardFocus===1?'selected':'';
+  host.brands(el('upNextBrands'),(next.brands || active.brands || []).slice(0,1));
+  var img=el('upNextImage'),src=host.image(next.thumbnail || next.artwork,'card');
+  if(img._watchSource!==src) { img._watchSource=src;host.cover(img,306,190.5,false);img.src=src; }
  }
  function paint() {
+  if(!active) { return; }
   var prior=focus>=0 && buttons[focus]?buttons[focus].id:null,m=currentMarker(),i,node;
   buttons=[];
   if(m) { buttons.push({id:'skip',title:m.kind==='recap'?'Skip recap':'Skip intro',marker:m}); }
   if(features && features.chapters.length && !completed) { buttons.push({id:'chapters',title:'Chapters'}); }
-  if(next) { buttons.push({id:'next',title:'Play next'}); }
   if(next && queue && queue.current && queue.current.id===active.episode_id && !completed) { buttons.push({id:'autoplay',title:'Autoplay: '+(queue.autoplay?'On':'Off')}); }
-  if(completed) { buttons.push({id:'close',title:countdown>0?'Cancel autoplay':'Close'}); }
+
   if(prior) { focus=-1;for(i=0;i<buttons.length;i+=1) { if(buttons[i].id===prior) { focus=i; } } }
   if(focus>=buttons.length) { focus=buttons.length-1; }
   el('playbackHelp').setAttribute('data-extra-focus',focus>=0?'true':'false');
-  label('featureHint',buttons.length && !completed ? (focus>=0?'Left / Right · Choose    OK · Activate    Up · Transport':'Down · Chapters and next episode') : '');
-  el('featureActions').innerHTML='';
+  label('featureHint',buttons.length && !completed ? (focus>=0?'Left / Right · Choose    OK · Activate    Up · Transport':'Down · Playback options') : '');
+  var signature=buttons.map(function (b,i) { return b.id+':'+b.title+':'+(i===focus); }).join('|');
+  if(signature!==actionSignature) { actionSignature=signature;el('featureActions').innerHTML='';
   for(i=0;i<buttons.length;i+=1) { node=document.createElement('span');node.textContent=buttons[i].title;node.className=i===focus?'selected':'';el('featureActions').appendChild(node); }
+  }
   card();
  }
  function chapters() {
@@ -114,11 +135,11 @@ var WatchExtras = (function () {
    else if(k==='ok') { var target=features.chapters[chapter].start;chapter=-1;el('chapterMenu').style.display='none';host.seek(target); }
    return true;
   }
-  if(completed) {
-   if(k==='back' || k==='stop') { cancel();host.close();return true; }
-   if(k==='left' || k==='right') { focus=Math.max(0,Math.min(buttons.length-1,focus+(k==='left'?-1:1)));paint(); }
-   else if(k==='ok' || k==='play') { activate(); }
-   return true;
+  if((offered || completed) && !dismissed && next && cardFocus>=0) {
+   if(k==='back' || k==='up') { dismissed=true;autoplayCancelled=true;cardFocus=-1;card();if(completed) { cancel();host.close(); }else { host.reveal(); }return true; }
+   if(k==='left' || k==='right') { cardFocus=k==='left'?0:1;card();return true; }
+   if(k==='ok' || k==='play') { if(cardFocus===0) { var item=next;cancel();host.play(item); }else { cancel();host.close(); }return true; }
+   if(k==='down') { return true; }
   }
   if(focus>=0) {
    if(k==='up' || k==='back') { focus=-1;paint();host.reveal();return true; }
@@ -152,10 +173,14 @@ var WatchExtras = (function () {
   });return true;
  }
  function showEnd(autoplay) {
-  if(!next) { cancel();host.close();return; }
+  if(!next || dismissed) { cancel();host.close();return; }
   var reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  countdown=autoplay && !reduced ? 10:0;focus=0;paint();host.reveal();
-  if(countdown) { var mine=epoch;function step() { if(mine!==epoch || !completed) { return; }countdown-=1;paint();if(countdown<=0) { var item=next;cancel();host.play(item); }else { timer=setTimeout(step,1000); } }timer=setTimeout(step,1000); }
+  // The countdown was inside Next episode during the final ten seconds.
+  // Its expiry alone never starts video; this path follows natural completion,
+  // successful completion persistence and a successful revisioned advance only.
+  if(autoplay && offered && !autoplayCancelled && !reduced) { var item=next;cancel();host.play(item);return; }
+  offered=true;cardFocus=0;cardSignature='';paint();
  }
- return {init:function(h) { host=h; },begin:begin,cancel:cancel,key:key,tick:paint,complete:finish};
+
+ return {init:function(h) { host=h;document.body.appendChild(el('upNextCard')); },begin:begin,cancel:cancel,key:key,tick:paint,complete:finish};
 }());

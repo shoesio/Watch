@@ -1,3 +1,9 @@
+## Apple TV build 71 parity — Samsung 0.340
+
+Show and film detail pages, All series with exact Continue Watching focus, cleaner episode metadata, upper-third hero crops, matched portrait artwork and restrained focus motion. Up next is now the compact full-artwork card with provider badge, episode details and Next episode/Exit; its countdown stays inside Next episode and autoplay waits for natural completion. QI W → X ordering is fixed. Existing playback and pairing remain intact.
+
+See [implementation, limits, credits-analysis investigation and verification](BUILD71-PARITY.md). The Pi installer offers 0.340; synchronise from 192.168.0.146 and reopen Watch. Automated checks pass; physical verification is recorded separately.
+
 ### Playback extras — 0.335
 
 Samsung-only chapters, verified Skip intro/recap, an Up next card and optional autoplay, using authenticated `/api/playback/*` routes on the existing Samsung gateway. No Apple TV token, auth or playback route is reused. The normalization module is a self-contained copy of the shared `server/watch-appletv/playback_features.py` contract implementation; the adapter binds timings to this TV's active ticket and selected original source, and uses its own private `samsung-series-queue.json`. Reviewed exact-source sidecars remain read-only in the shared private `appletv/playback-markers.json` location.

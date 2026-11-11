@@ -42,12 +42,17 @@ def series_after(programmes,ident,limit=20):
     group=next((p for p in programmes if any(e['id']==ident for e in p.get('episodes',[]))),None)
     if not group or group.get('live') or group.get('film'):return []
     def order(e):
-        season=str(e.get('season',''))
+        season=str(e.get('season','')).strip()
+        # QI uses alphabetic series (Series W, Series X). Accept explicit
+        # single-letter seasons, without interpreting named specials as seasons.
+        letter=re.fullmatch(r'(?:Series\s+)?([A-Z])',season,re.IGNORECASE)
+        numeric=re.fullmatch(r'(?:Series\s+)?([0-9]+)',season,re.IGNORECASE)
+        season_number=ord(letter[1].upper())-ord('A')+1 if letter else int(numeric[1]) if numeric else 0
         number=e.get('episode_number')
-        if not season.isdigit() or int(season)<=0 or isinstance(number,bool):return None
+        if season_number<=0 or isinstance(number,bool):return None
         try:number=int(number)
         except (ValueError,TypeError):return None
-        return (int(season),number) if number>0 else None
+        return (season_number,number) if number>0 else None
     current=next(e for e in group['episodes'] if e['id']==ident);key=order(current)
     # Unnumbered specials are not guessed into the story's sequence.
     if key is None:return []
@@ -71,7 +76,7 @@ class PlaybackFeatures:
         duration=seconds(source.get('duration_seconds')) or 0
         key=source_key(source,provider)
         result={'schema_version':SCHEMA,'source_key':key,'timebase':'episode','version_id':version_id,
-                'chapters':[],'skip_markers':[],'status':'unavailable','provenance':[]}
+                'chapters':[],'skip_markers':[],'credits':[],'status':'unavailable','provenance':[]}
         if source.get('live'):result['status']='not_applicable';return result
         # Existing resolver/catalogue output may already carry exact-source chapters.
         info=dict((prepared or {}).get('info',{}))
@@ -86,7 +91,8 @@ class PlaybackFeatures:
             except (OSError,ValueError,subprocess.SubprocessError):pass
         chapters=intervals(source.get('chapters') or info.get('chapters'),duration)
         markers=intervals(source.get('skip_markers'),duration,skip=True)
-        if chapters or markers:result['provenance'].append('source_metadata')
+        credits=[c for c in intervals(source.get('credits'),duration) if c['kind'] in ('credits','end_credits')]
+        if chapters or markers or credits:result['provenance'].append('source_metadata')
         # Reviewed local additions are keyed by exact source AND rendition version.
         import json
         try:reviewed=json.loads((self.root/'playback-markers.json').read_text()).get(key,{})
@@ -94,6 +100,9 @@ class PlaybackFeatures:
         if reviewed.get('verified') is True and reviewed.get('version_id')==version_id:
             chapters=intervals(reviewed.get('chapters'),duration) or chapters
             markers=intervals(reviewed.get('skip_markers'),duration,skip=True) or markers
+            # Credits are cues only, never skip controls. Reviewed cues also bind duration.
+            if duration and seconds(reviewed.get('duration_seconds')) and abs(seconds(reviewed['duration_seconds'])-duration)<=0.5:
+                credits=[c for c in intervals(reviewed.get('credits'),duration) if c['kind'] in ('credits','end_credits')] or credits
             result['provenance'].append('reviewed_metadata')
         match=re.fullmatch(r'https://www\.bbc\.co\.uk/iplayer/episode/([a-z0-9]{8})(?:[/\?#].*)?',str(source.get('url','')))
         if provider=='BBC iPlayer' and match:
@@ -112,6 +121,6 @@ class PlaybackFeatures:
                         chapters=intervals(version.get('chapters'),duration) or chapters
                         result['provenance'].append('BBC exact version')
                 except (requests.RequestException,ValueError,TypeError):result['status']='temporarily_unavailable'
-        result.update(chapters=chapters,skip_markers=markers)
-        if chapters or markers:result['status']='available'
+        result.update(chapters=chapters,skip_markers=markers,credits=credits)
+        if chapters or markers or credits:result['status']='available'
         return result

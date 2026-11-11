@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from playback_features import PlaybackFeatures,source_key,series_after,episode_row
 from tmdb_logos import atomic
+from episode_versions import seconds as duration_seconds
 
 class PlaybackAdapter:
     def init_playback_features(self):
@@ -17,7 +18,7 @@ class PlaybackAdapter:
     def feature_rows(self):
         rows=[]
         for group in self.library():
-            rows.append(dict(group,artwork=group.get('hero'),episodes=[dict(e,thumbnail=self.art_id(e.get('thumbnail')),brands=[b for b in group.get('brands',[]) if b.get('name')==p]) for e,p in group['_episodes']]))
+            rows.append(dict(group,artwork=group.get('hero'),episodes=[dict(e,duration_seconds=duration_seconds(e.get('duration_seconds')),thumbnail=self.art_id(e.get('thumbnail')),brands=[b for b in group.get('brands',[]) if b.get('name')==p]) for e,p in group['_episodes']]))
         return rows
 
     @staticmethod

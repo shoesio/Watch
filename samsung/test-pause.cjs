@@ -29,7 +29,7 @@ w.eval(fs.readFileSync(path.join(root,'watch.js'),'utf8'));
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
 (async()=>{
- w.Watch.init();await wait(20);press(13);await wait(10);press(13);await wait(10);press(13);await wait(30);
+ w.Watch.init();await wait(20);press(13);await wait(20);press(13);await wait(30);
  w.Watch.buffered();w.Watch.tick(1000);w.Watch.tick(121000);
  assert.match(w.document.getElementById('timeLabel').textContent,/2:01/);
  const count=prepares.length;

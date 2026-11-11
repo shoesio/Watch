@@ -29,7 +29,7 @@ w.eval(fs.readFileSync(path.join(root,'watch.js'),'utf8'));
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const press=keyCode=>w.Watch.key({keyCode,preventDefault(){}});
 (async()=>{
- w.Watch.init();await wait(20);press(13);await wait(10);press(13);await wait(10);press(13);await wait(30);
+ w.Watch.init();await wait(20);press(13);await wait(20);press(13);await wait(30);
  const oldPoster=w.document.getElementById('preloadPhoto'), lateLoad=oldPoster.onload;
  assert.equal(oldPoster.style.display,'none');assert.equal(oldPoster.hasAttribute('src'),false);
  w.Watch.buffered();

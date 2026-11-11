@@ -53,7 +53,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.gateway.settings['allowed_clients'] = ['192.0.2.1']
         self.assertEqual((await self.client.get('/api/library',headers=self.headers)).status,403)
     async def test_artwork_accepts_header_or_image_tag_key(self):
-        self.gateway.get_image = lambda image_id:b'jpeg-fixture'
+        self.gateway.get_image = lambda image_id,variant='hero':b'jpeg-fixture'
         self.assertEqual((await self.client.get('/art/example',headers=self.headers)).status,200)
         self.assertEqual((await self.client.get('/art/example?key='+self.key)).status,200)
         self.assertEqual((await self.client.get('/art/example')).status,401)
@@ -78,7 +78,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         r = await self.client.get('/api/episodes/'+group,headers=self.headers)
         data = await r.json()
         self.assertEqual(data['total'],2)
-        self.assertEqual([e['meta'] for e in data['items']],['Channel 4','U'])
+        self.assertEqual([e['brands'][0]['name'] for e in data['items']],['Channel 4','U'])
         self.assertNotIn('private.invalid',json.dumps(data))
     async def test_live_and_blocked_items(self):
         data = await (await self.client.get('/api/library?tab=2',headers=self.headers)).json()
@@ -156,7 +156,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         data=await (await self.client.get('/api/episodes/'+group,headers=self.headers)).json()
         self.assertEqual([e['id'] for e in data['items']],['new','old','u_only'])
         data=await (await self.client.get('/api/seasons/'+group,headers=self.headers)).json()
-        self.assertEqual([e['title'] for e in data['items']],['All episodes','Series 12','Series 2','Series 1'])
+        self.assertEqual([e['title'] for e in data['items']],['All series','Series 12','Series 2','Series 1'])
         self.assertEqual([b['id'] for b in data['items'][1]['brands']],['channel4'])
         self.assertEqual([b['id'] for b in data['items'][3]['brands']],['u'])
 

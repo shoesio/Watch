@@ -25,7 +25,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms)),press=keyCode=>w.Watch.key({keyC
  assert.equal(w.document.getElementById('heroCount').textContent,'1 / 6');
  assert.equal(w.document.querySelector('.cardSynopsis').textContent,'Actual synopsis');assert.equal(w.document.querySelector('.cardProgress div').style.width,'25%');
  press(8);for(let i=0;i<20;i++)press(39);press(13);assert.equal(w.document.getElementById('heroCount').textContent,'2 / 6');
- press(37);press(13);await wait(20);assert.equal(w.document.getElementById('heroControls').style.display,'none');assert.equal(w.document.getElementById('nav7').style.display,'none');
+ press(37);press(13);await wait(20);assert.equal(w.document.getElementById('heroControls').style.display,'block');assert.equal(w.document.getElementById('nav7').style.display,'none');
  press(8);await wait(25);press(8);for(let i=0;i<20;i++)press(37);press(39);press(39);press(39);press(13);await wait(25);
  assert.equal(w.document.querySelector('.cardSynopsis').textContent,'Live programme synopsis');assert.ok(w.document.querySelector('.channelCornerLogo').src.endsWith('/images/marks/bbcone.png'));
  w.Watch.shutdown();dom.window.close();console.log('PASS: six For You highlights, hero controls/open, synopsis retained with progress, live synopsis and transparent mark.');

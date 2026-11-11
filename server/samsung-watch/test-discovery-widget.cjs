@@ -27,7 +27,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms)),press=keyCode=>w.Watch.key({keyC
  delayImport=true;press(13);assert.equal(w.document.getElementById('shell').style.display,'none');assert.equal(w.document.getElementById('preloadPhoto').style.display,'block');assert.equal(w.document.getElementById('bufferSpinner').textContent,'');
  await wait(80);assert.equal(w.document.getElementById('shell').style.display,'block');assert.equal(w.document.getElementById('nav7').style.display,'none');
  assert.equal(w.document.getElementById('nav11').style.display,'');assert.equal(w.document.getElementById('nav12').style.display,'');
- press(38);for(let i=0;i<20;i++)press(39);press(13);await wait(15);assert.ok(calls.some(c=>c.url.endsWith('/api/favourite')&&JSON.parse(c.body).favourite));assert.equal(w.document.getElementById('nav12').textContent,'Unfavourite');
+ press(38);for(let i=0;i<20;i++)press(39);press(37);press(37);press(13);await wait(15);assert.ok(calls.some(c=>c.url.endsWith('/api/favourite')&&JSON.parse(c.body).favourite));assert.equal(w.document.getElementById('nav12').textContent,'Unfavourite');
  press(37);press(13);await wait(25);assert.ok(calls.at(-1).url.includes('mode=related'));assert.equal(w.document.getElementById('nav7').style.display,'none');
  press(8);for(let i=0;i<20;i++)press(37);press(39);press(39);press(13);await wait(20);assert.equal(w.document.getElementById('nav13').style.display,'');
  press(8);for(let i=0;i<20;i++)press(39);press(37);press(13);await wait(20);assert.ok(calls.some(c=>c.url.includes('mode=featured')));assert.equal(w.document.body.className,'');

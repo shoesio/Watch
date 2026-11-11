@@ -136,3 +136,85 @@ html,body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 #playback[data-up-next="true"] #playingShow,#playback[data-up-next="true"] #playingTitle{max-width:660px}
 #playback[data-up-next="true"] #playingDescription{width:660px}
 #playback[data-up-next="true"] #playingLogo{max-width:620px}
+
+/* Build-71 parity within Orsay's fixed 1080p package: small, focused 2D work only. */
+#heroImage{opacity:.92}
+#heroShade{background:-webkit-linear-gradient(left,#090a0d 25%,rgba(9,10,13,.93) 38%,rgba(9,10,13,0) 75%);background:linear-gradient(to right,#090a0d 25%,rgba(9,10,13,.93) 38%,rgba(9,10,13,0) 75%)}
+#heroBottom{height:90px}
+#heroText{left:48px;top:60px;width:590px}
+#description{width:590px;height:52px;line-height:24px;font-size:18px;color:#c5c7ce}
+#showLogo{max-width:600px;max-height:124px}
+h1{font-size:39px;line-height:44px;max-width:620px}
+#heroControls #nav16{width:auto;min-width:96px;padding:7px 18px;border-radius:18px;background:rgba(255,255,255,.13);font-size:17px}
+#heroControls #nav16.focus{background:#fff;color:#111;border-color:transparent}
+.card{border:2.667px solid transparent;border-radius:10px;background:#15171b}
+.card.focus{border-color:rgba(255,255,255,.65);background:#20232a;box-shadow:0 6px 15px rgba(0,0,0,.5);z-index:5}
+body[data-focus-motion="true"] .card{-webkit-transition:-webkit-transform .13s ease,box-shadow .13s ease;transition:transform .13s ease,box-shadow .13s ease}
+body[data-focus-motion="true"] .card.focus{-webkit-transform:translateY(-2px) scale(1.035);transform:translateY(-2px) scale(1.035);border-color:rgba(255,255,255,.2)}
+body[data-focus-motion="true"] .card.focus .brands{-webkit-transform:translateY(-1px);transform:translateY(-1px)}
+.card .cardProgress{bottom:12px;left:12px;right:12px;height:3px;border-radius:2px;overflow:hidden}
+.card .name{font-weight:700}
+.card .cardSynopsis{color:#bfc2ca}
+.card .meta{color:#9ea4af}
+.show-detail .card .name{top:132px;font-size:17px;height:22px;line-height:22px}
+.show-detail .card .cardSynopsis{top:158px;height:42px;line-height:14px}
+.show-detail .card .meta{top:211px;font-size:13px}
+.show-detail .card .cardProgress{bottom:10px}
+.film-detail #cards{display:none}
+#seriesMenu{position:absolute;right:48px;top:100px;width:440px;padding:25px;background:#12151c;border-radius:12px;z-index:240}
+#seriesMenu h2{font-size:26px;font-weight:400;margin:0 0 16px}
+#seriesChoices div{font-size:21px;padding:8px 14px;border-radius:6px}
+#seriesChoices .selected{background:#fff;color:#111}
+#seriesMenu p{font-size:14px;color:#bfc4ce}
+/* A portrait shelf is only used when every visible item has a matched poster. */
+body[data-portrait-row="true"] #hero{height:240px}
+body[data-portrait-row="true"] #heroText{top:26px}
+body[data-portrait-row="true"] #showLogo{max-height:65px}
+body[data-portrait-row="true"] #description{height:26px}
+body[data-portrait-row="true"] #navigation{top:237px}
+body[data-portrait-row="true"] #cards{top:295px;height:360px}
+body[data-portrait-row="true"] .card{height:360px;background:transparent}
+body[data-portrait-row="true"] .card .picture{width:180px;height:270px;left:50px}
+body[data-portrait-row="true"] .card .name{top:282px;text-align:center}
+body[data-portrait-row="true"] .card .cardSynopsis{display:none}
+body[data-portrait-row="true"] .card .meta{top:313px;text-align:center}
+body[data-portrait-row="true"] .card .brands{left:58px}
+/* Full-artwork Up next floats above native video, independently of transport visibility. */
+#upNextCard{right:48px;bottom:40px;width:408px;height:254px;border-radius:13px;background:#15171c;box-shadow:0 9px 24px rgba(0,0,0,.45);z-index:100}
+#upNextImage{position:absolute;left:0;top:0;width:408px;height:254px;visibility:hidden}
+#upNextShade{position:absolute;left:0;top:0;width:100%;height:100%;background:-webkit-linear-gradient(top,rgba(0,0,0,.4),rgba(0,0,0,0) 32%,rgba(0,0,0,.7) 68%,rgba(5,6,8,.98));background:linear-gradient(to bottom,rgba(0,0,0,.4),rgba(0,0,0,0) 32%,rgba(0,0,0,.7) 68%,rgba(5,6,8,.98))}
+#upNextHeading{position:absolute;left:20px;top:19px;font-size:12px;font-weight:700;letter-spacing:1px}
+#upNextBrands{position:absolute;right:18px;top:16px;height:22px}
+#upNextBrands .brandLogo{height:21px;margin:0}
+#upNextCopy{position:absolute;left:20px;right:20px;top:auto;bottom:18px}
+#upNextShow{display:none}
+#upNextTitle{font-size:22px;font-weight:700;line-height:26px;max-height:52px;margin:0;text-shadow:0 2px 6px rgba(0,0,0,.5)}
+#upNextDetails{font-size:13px;color:#d5d7de;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#upNextActions{margin-top:16px;font-size:14px;font-weight:700;white-space:nowrap}
+#upNextActions span{display:inline-block;padding:10px 14px;border-radius:19px;line-height:19px;text-align:center;background:rgba(255,255,255,.15);color:white}
+#upNextActions #upNextPlay{width:260px;margin-right:8px}
+#upNextActions #upNextExit{width:92px}
+#upNextActions .selected{background:#fff;color:#111}
+@media(prefers-reduced-motion:reduce){body[data-focus-motion="true"] .card,body[data-focus-motion="true"] .card.focus,body[data-focus-motion="true"] .card.focus .brands{-webkit-transition:none;transition:none;-webkit-transform:none;transform:none}.card.focus{border-color:#e5e7ec}}
+/* Show pages reserve enough vertical room for an uncropped 16:9 episode still. */
+.show-detail #hero{height:320px}
+.show-detail #heroText{top:38px}
+.show-detail #showLogo{max-height:88px}
+.show-detail #heroControls{top:273px}
+.show-detail #navigation{top:325px}
+.show-detail #cards{top:385px;height:280px}
+.show-detail .card{height:280px}
+.show-detail .card .picture{height:157.5px}
+.show-detail .card .name{top:166px}
+.show-detail .card .cardSynopsis{top:192px}
+.show-detail .card .meta{top:244px}
+.film-detail #hero{height:620px}
+.film-detail #heroText{top:150px}
+.film-detail #navigation{top:30px}
+.film-detail #heroControls{top:550px}
+.film-detail #description{height:76px}
+/* Keep progress rails clear of captions, including the denser library grid. */
+.card .cardSynopsis{height:36px}
+.card .meta{top:202px}
+.all-shows .card .meta{top:218px}
+.show-detail .card .cardSynopsis{height:42px}
