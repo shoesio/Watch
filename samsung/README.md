@@ -1,3 +1,9 @@
+## Live-channel branding and simpler series headers — Samsung 0.353
+
+Live channel selection, cinematic live cards, loading and playback/pause now show the selected channel mark only, with no provider badge or secondary show logo. Series pages omit the redundant eyebrow (repeated show/provider/count) and Choose episode action; their episode cards remain directly focused/selectable. Film Play and spotlight navigation actions are retained. The selected-channel name remains available as text/alt text.
+
+The installer offers 0.353. Client checks cover channel-only branding through loading and pause, direct episode selection and retained film/live behaviour. This is widget-only: pairing, autostart, the approved menu/focus and hero/fade changes, and provider/playback services remain unchanged. Physical confirmation of this cleanup is pending.
+
 ## Hero crop, fade and live information — Samsung 0.352
 
 Hero photos now sit in an explicitly clipped area below the fixed top menu. Both the cinematic spotlight and show/film/live heroes calculate their upper-third crop against this visible area. Their bottom fades share the exact lower image edge, sit above the photo in an explicit layer, and finish in a solid strip matching the page background. This prevents an oversized image or gradient-edge rounding from exposing a bright strip below the fade. Live channel branding and Now/Next copy start below the menu and contextual tools.

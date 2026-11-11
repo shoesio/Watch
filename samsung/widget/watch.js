@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.352', seekTransition = false;
+ var buildVersion = '0.353', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -76,8 +76,12 @@ var Watch = (function () {
   }
   img.onload = fit; if (img.complete) { fit(); }
  }
- function branding(node, brands) {
+ function branding(node, brands, channel, title, live) {
   var i, img; node.innerHTML = '';
+  if(channel || live) {
+   if(channel && /^[a-z0-9_-]{1,40}$/.test(channel)) { img=document.createElement('img');img.className='channelMark';img.src='images/marks/'+channel+'.png';img.alt=title || '';node.appendChild(img); }
+   return;
+  }
   for (i = 0; i < (brands || []).length; i += 1) {
    if (!/^(bbc|channel4|u|channel5|itv)$/.test(brands[i].id)) { continue; }
    img = document.createElement('img'); img.className = 'brandLogo'; img.src = 'images/brands/' + brands[i].id + '.png'; img.alt = brands[i].name; node.appendChild(img);
@@ -92,10 +96,9 @@ var Watch = (function () {
    var guide = item.guide || {}, now = guide.now, next = guide.next;
    text('description', (now ? 'Now  ' + now.title : 'Programme information currently unavailable') + (next ? '\nNext  ' + next.time + '  ' + next.title : ''));
   }
-  text('eyebrow', item ? ((item.content_rating ? item.content_rating + ' · ' : '') + (item.favourite ? '★ · ' : '') + (item.show_logo && item.show_title ? item.title + ' · ' : '') + (item.meta || '')) : 'Your library');
-  branding(el('heroBrands'), item && item.brands);
-  if (item && item.channel_brand) { var channelMark = document.createElement('img'); channelMark.className = 'channelMark'; channelMark.src = 'images/marks/' + item.channel_brand + '.png'; channelMark.alt = item.title; el('heroBrands').appendChild(channelMark); }
-  var logo = el('showLogo'), mark = item && (item.show_logo || (group && group.show_logo));
+  text('eyebrow', (group && !group.film) || (item && item.live) ? '' : item ? ((item.content_rating ? item.content_rating + ' · ' : '') + (item.favourite ? '★ · ' : '') + (item.show_logo && item.show_title ? item.title + ' · ' : '') + (item.meta || '')) : 'Your library');
+  branding(el('heroBrands'),item && item.brands,item && item.channel_brand,item && item.title,item && item.live);
+  var logo = el('showLogo'), mark = item && !item.live && (item.show_logo || (group && group.show_logo));
   var logoSource = mark && !(item && (item.artwork_contains_title || item.artwork_has_title)) && WATCH_CONNECTION.key !== 'SET_DURING_PI_PACKAGING' ? WATCH_CONNECTION.base + '/show-logo/' + encodeURIComponent(mark) + '?key=' + encodeURIComponent(WATCH_CONNECTION.key) : '';
   if (logoSource) {
    logo.alt = item.show_title || (group && group.title) || item.title;
@@ -135,7 +138,7 @@ var Watch = (function () {
   for (i = 0; i < rows.length; i += 1) {
    card = document.createElement('div'); card.className = 'card'; card.id = 'card' + i;
    var picture = document.createElement('div'), brands = document.createElement('div');
-   picture.className = 'picture'; brands.className = 'brands'; branding(brands, rows[i].brands);
+   picture.className = 'picture'; brands.className = 'brands'; branding(brands, rows[i].live ? [] : rows[i].brands);
    img = document.createElement('img'); var imageSource = rows[i].channel_brand ? artwork(rows[i], 'thumb') : portraitRow ? image(rows[i].poster,'poster') : image(rows[i].home_episode ? rows[i].image : (rows[i].card_artwork || rows[i].image), 'thumb'); img.alt = '';
    cover(img, portraitRow ? 135 : 210, portraitRow ? 202.5 : (group && !group.film ? 118.125 : (pageSize === 8 ? 105 : 93)), portraitRow || !!rows[i].channel_brand && !(rows[i].guide && rows[i].guide.now && rows[i].guide.now.art));
    if (rows[i].channel_brand) { var channelBadge = document.createElement('div'), channelImage = document.createElement('img'); channelBadge.className = 'channelCorner';channelImage.className='channelCornerLogo'+(/^bbc(one|two|four|news)$/.test(rows[i].channel_brand) ? ' bbcChannelLogo' : ''); channelImage.src = 'images/marks/' + rows[i].channel_brand + '.png'; channelImage.alt = rows[i].title;channelBadge.appendChild(channelImage);card.appendChild(channelBadge); }
@@ -164,7 +167,7 @@ var Watch = (function () {
   for (i = 0; i < navOrder.length; i += 1) { var navId = navOrder[i]; el('nav' + navId).className = (navId === activeNav() && !group ? 'active ' : '') + (area === 'nav' && navId === nav ? 'focus' : ''); }
   for (i = 0; i < rows.length; i += 1) { var nextClass = 'card' + (rows[i].channel_brand ? ' channel' : '') + (area === 'grid' && i === focus ? ' focus' : '');if(el('card'+i).className!==nextClass) { el('card'+i).className=nextClass; } }
   if (group) { describe(group); } else if (highlights.length && !group && tab === 0 && !browseMode) { describe(highlights[highlightFocus]); } else if (rows[focus]) { describe(rows[focus]); }
-  var showHighlights=highlights.length && !group && tab===0 && !browseMode, showHero=!!group || showHighlights;el('heroControls').style.display=showHero ? 'block':'none';el('nav14').style.display=showHighlights ? '':'none';el('nav15').style.display=showHighlights ? '':'none';el('nav16').style.display=showHero ? '':'none';text('nav16',group ? (group.film?'Play':'Choose episode'):'Open');text('heroCount',showHighlights ? (highlightFocus+1)+' / '+highlights.length : '');
+  var showHighlights=highlights.length && !group && tab===0 && !browseMode, showHero=!!(group && group.film) || showHighlights;el('heroControls').style.display=showHero ? 'block':'none';el('nav14').style.display=showHighlights ? '':'none';el('nav15').style.display=showHighlights ? '':'none';el('nav16').style.display=showHero ? '':'none';text('nav16',group ? (group.film?'Play':''):'Open');text('heroCount',showHighlights ? (highlightFocus+1)+' / '+highlights.length : '');
   el('nav17').style.display=group && !group.film ? '':'none';
   text('nav17',season==='all'?'All series':(seriesChoices.filter(function (r) { return r.id===season; })[0] || {}).title || 'Series');
   el('nav11').style.display = group && !group.film ? '' : 'none';
@@ -278,7 +281,7 @@ var Watch = (function () {
   if (area === 'nav') {
    if (nav < 3) { group = null; browseMode = ''; browseSnapshot = ''; tab = nav; genre = ''; area = 'grid'; loadPage(0); }
    else if (nav === 17) { showSeries(); }
-   else if (nav === 16 && group) { if(group.film) { start(group); }else { area='grid';detailEpisode=detailAnchor;loadPage(detailPage,detailFocus); } }
+   else if (nav === 16 && group && group.film) { start(group); }
    else if (nav === 7) { openGenres(); }
    else if (nav === 9) { searchFocus = 0; el('searchMenu').style.display = 'block'; paintSearch(); }
    else if (nav === 10) { group = null; tab = 1; browseMode = 'recommend'; browseSnapshot = ''; genre = ''; area = 'grid'; loadPage(0); }
@@ -368,11 +371,10 @@ var Watch = (function () {
   }
   if (data.duration_seconds && !livePlayback) { parts.push(Math.round(Number(data.duration_seconds)/60) + ' min'); }
   text('playingEpisode', parts.join(' · '));
-  branding(el('playingBrands'), data.brands);
-  if (data.channel_brand) { var mark=document.createElement('img');mark.className='channelMark';mark.src='images/marks/'+data.channel_brand+'.png';mark.alt=show;el('playingBrands').appendChild(mark); }
+  branding(el('playingBrands'),data.brands,data.channel_brand,show,livePlayback);
   var logo = el('playingLogo'); logo.style.display = 'none'; el('playingShow').style.display = 'block';
   logo.onload = null; logo.onerror = null;
-  if (data.show_logo) {
+  if (data.show_logo && !livePlayback) {
    var source = WATCH_CONNECTION.base + '/show-logo/' + encodeURIComponent(data.show_logo) + '?key=' + encodeURIComponent(WATCH_CONNECTION.key);
    logo.alt = show;
    logo.onload = function () { logo.style.display = 'block'; el('playingShow').style.display = 'none'; };

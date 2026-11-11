@@ -31,10 +31,10 @@ async function nav(id){await focusNav(w,press,id);press(13);await wait(30);}
  assert.ok(Math.abs(parseFloat(hero.style.top)+parseFloat(hero.style.height)/3-parseFloat(w.getComputedStyle(w.document.getElementById('heroArt')).height)/3)<1,'hero upper thirds align');
  assert.equal(w.getComputedStyle(w.document.querySelector('.picture')).height,'157.5px');
  assert.equal(prepares.length,0);assert.equal(w.document.body.className,'show-detail');assert.ok(w.document.getElementById('card3').className.includes('focus'));
- assert.equal(w.document.getElementById('nav17').textContent,'All series');assert.equal(w.document.getElementById('nav16').textContent,'Choose episode');
+ assert.equal(w.document.getElementById('nav17').textContent,'All series');assert.equal(w.document.getElementById('nav16').style.display,'none');assert.equal(w.document.getElementById('eyebrow').textContent,'');
  assert.match(calls.find(c=>c.url.includes('/episodes/')).url,/season=all.*focus_episode=e1/);
  assert.equal(w.document.querySelector('.name').textContent,'Series 1: Episode 4');assert.equal(w.document.querySelector('.meta').textContent,'29 Min • HD');
- await nav(16);assert.ok(w.document.getElementById('card3').className.includes('focus'));assert.equal(prepares.length,0);
+ assert.ok(w.document.getElementById('card3').className.includes('focus'));assert.equal(prepares.length,0);
  await nav(17);assert.equal(w.document.getElementById('seriesMenu').style.display,'block');press(40);press(40);press(13);await wait(30);
  assert.equal(w.document.getElementById('nav17').textContent,'Series 1');assert.equal(w.document.querySelector('.name').textContent,'Episode 4');
  await nav(0);assert.equal(w.document.body.className,'');assert.equal(w.document.getElementById('nav17').style.display,'none');
@@ -42,5 +42,5 @@ async function nav(id){await focusNav(w,press,id);press(13);await wait(30);}
  // Explicit sidebar selection resets the section instead of returning to its film.
  await nav(1);assert.equal(w.document.body.className,'all-shows');assert.equal(w.document.getElementById('nav17').style.display,'none');
  await nav(2);press(13);await wait(15);assert.equal(prepares.at(-1).episode_id,'live','live tunes directly');
- w.Watch.shutdown();dom.window.close();console.log('PASS: explicit show/film details, All series and retained filter, exact named-episode focus, Choose episode, root sidebar destinations and direct live tuning.');
+ w.Watch.shutdown();dom.window.close();console.log('PASS: explicit show/film details, All series and retained filter, exact named-episode focus, no redundant series action/eyebrow, root sidebar destinations and direct live tuning.');
 })().catch(e=>{console.error(e);dom.window.close();process.exitCode=1});

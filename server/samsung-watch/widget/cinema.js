@@ -39,10 +39,10 @@ var WatchCinema=(function(){
   var actionClass=host.inNav()?'':'selected';if(el('cinemaHeroAction').className!==actionClass){el('cinemaHeroAction').className=actionClass;}
   var identity=[item.id,item.home_episode || '',hero].join(':');if(identity===heroSignature){return;}heroSignature=identity;
   text('cinemaHeroTitle',item.title);text('cinemaHeroDescription',item.description);text('cinemaHeroCaption',item.meta || '');
-  host.brands(el('cinemaHeroBrands'),item.brands);
+  host.brands(el('cinemaHeroBrands'),item.brands,item.channel_brand,item.title,item.live);
   var photo=el('cinemaHeroImage'),source=host.art(item);
   if(photo._source!==source){photo._source=source;host.cover(photo,960,315.75,false,true);photo.src=source;}
-  var logo=el('cinemaHeroLogo'),mark=item.show_logo,logoSource=mark && !item.artwork_contains_title ? host.logo(mark):'';
+  var logo=el('cinemaHeroLogo'),mark=!item.live && item.show_logo,logoSource=mark && !item.artwork_contains_title ? host.logo(mark):'';
   if(logoSource){
    logo.onload=function(){logo.style.display='block';el('cinemaHeroTitle').style.display='none';};logo.onerror=function(){logo.style.display='none';el('cinemaHeroTitle').style.display='block';};
    if(logo._source!==logoSource){logo._source=logoSource;logo.style.display='none';el('cinemaHeroTitle').style.display='block';logo.src=logoSource;}
@@ -53,8 +53,8 @@ var WatchCinema=(function(){
  }
  function card(item,r,i,focused){
   var row=model.shelves[r],portrait=row.layout==='portrait',node=document.createElement('div'),surface=document.createElement('div'),picture=document.createElement('div'),img=document.createElement('img'),shade=document.createElement('div'),caption=document.createElement('div'),title=document.createElement('div'),brands=document.createElement('div');
-  node.className='cinemaCard'+(portrait?' portrait':'')+(focused&&!host.inNav()?' focus':'');node.setAttribute('data-id',item.id);surface.className='cinemaSurface';picture.className='cinemaPicture';shade.className='cinemaCardShade';caption.className='cinemaCaption';title.className='cinemaCardTitle';brands.className='cinemaBrands';
-  title.textContent=item.title;host.brands(brands,item.brands);var photo=portrait?host.image(item.poster,'poster'):item.channel_brand?host.art(item,'thumb'):host.image(item.home_episode?item.image:(item.card_artwork || item.image || item.hero),'thumb');
+  node.className='cinemaCard'+(item.live?' live':'')+(portrait?' portrait':'')+(focused&&!host.inNav()?' focus':'');node.setAttribute('data-id',item.id);surface.className='cinemaSurface';picture.className='cinemaPicture';shade.className='cinemaCardShade';caption.className='cinemaCaption';title.className='cinemaCardTitle';brands.className='cinemaBrands';
+  title.textContent=item.title;host.brands(brands,item.brands,item.channel_brand,item.title,item.live);var photo=portrait?host.image(item.poster,'poster'):item.channel_brand?host.art(item,'thumb'):host.image(item.home_episode?item.image:(item.card_artwork || item.image || item.hero),'thumb');
   host.cover(img,portrait?156:210,portrait?234:118.125,portrait || (!!item.channel_brand && !(item.guide && item.guide.now && item.guide.now.art)));img.src=photo;img.alt='';picture.appendChild(img);surface.appendChild(picture);surface.appendChild(shade);surface.appendChild(brands);
   if(!portrait){
    var short=document.createElement('div');short.className='cinemaCardInfo';short.textContent=item.caption || item.home_reason || (item.live && item.guide && item.guide.now ? item.guide.now.title:'');surface.appendChild(short);
