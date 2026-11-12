@@ -335,3 +335,7 @@ body[data-portrait-row="true"] #heroArt{height:176px}
 .film-detail #heroArt{height:620px}
 body[data-portrait-row="true"] #heroArt{height:240px}
 #cinemaHeroArt{top:0;height:485px}
+
+/* Lighter menu glass and no duplicate film/live hero labels. */
+#shell #navigation{background:rgba(23,24,28,.68)}
+.film-detail #eyebrow{display:none}

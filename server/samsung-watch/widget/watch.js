@@ -1,7 +1,7 @@
 /* ES5 only: Samsung 2012 Orsay / Maple. No framework or remote scripts. */
 var Watch = (function () {
  var renderScale = 4 / 3;
- var buildVersion = '0.354', seekTransition = false;
+ var buildVersion = '0.355', seekTransition = false;
  'use strict';
  var api = null, keys = {}, player = null, groups = [], rows = [], page = 0, total = 0;
  var tab = 0, nav = 0, focus = 0, area = 'grid', group = null, previous = null, choosingSeason = false, season = 'all';
@@ -96,7 +96,7 @@ var Watch = (function () {
    var guide = item.guide || {}, now = guide.now, next = guide.next;
    text('description', (now ? 'Now  ' + now.title : 'Programme information currently unavailable') + (next ? '\nNext  ' + next.time + '  ' + next.title : ''));
   }
-  text('eyebrow', (group && !group.film) || (item && item.live) ? '' : item ? ((item.content_rating ? item.content_rating + ' · ' : '') + (item.favourite ? '★ · ' : '') + (item.show_logo && item.show_title ? item.title + ' · ' : '') + (item.meta || '')) : 'Your library');
+  text('eyebrow', group || (item && item.live) ? '' : item ? ((item.content_rating ? item.content_rating + ' · ' : '') + (item.favourite ? '★ · ' : '') + (item.show_logo && item.show_title ? item.title + ' · ' : '') + (item.meta || '')) : 'Your library');
   branding(el('heroBrands'),item && item.brands,item && item.channel_brand,item && item.title,item && item.live);
   var logo = el('showLogo'), mark = item && !item.live && (item.show_logo || (group && group.show_logo));
   var logoSource = mark && !(item && (item.artwork_contains_title || item.artwork_has_title)) && WATCH_CONNECTION.key !== 'SET_DURING_PI_PACKAGING' ? WATCH_CONNECTION.base + '/show-logo/' + encodeURIComponent(mark) + '?key=' + encodeURIComponent(WATCH_CONNECTION.key) : '';
@@ -109,6 +109,11 @@ var Watch = (function () {
     logo._watchLoaded = false; logo.src = logoSource;
    } else { logo.style.display = logo._watchLoaded ? 'block' : 'none'; el('title').style.display = logo._watchLoaded ? 'none' : 'block'; }
   } else { logo._watchSource = ''; logo._watchLoaded = false; logo.onload = null; logo.onerror = null; logo.style.display = 'none'; el('title').style.display = 'block'; }
+  var liveMark=item && item.live && el('heroBrands').firstChild;
+  if(liveMark && liveMark.className==='channelMark') {
+   el('title').style.display='none';
+   liveMark.onerror=function () { if(el('heroBrands').firstChild===this && lastPaintedHero===item) { this.style.display='none';el('title').style.display='block'; } };
+  }
   var hero = el('heroImage'), frame = el('hero'), heroHeight=portraitRow ? 180:(group ? (group.film?465:300):280);
   // Fit the photo to the visible frame below the 64px menu (48 logical units).
   heroHeight=Math.max(1,heroHeight-48);
@@ -381,6 +386,11 @@ var Watch = (function () {
    logo.onerror = function () { logo.style.display = 'none'; el('playingShow').style.display = 'block'; };
    if (logo._watchSource === source && logo.complete && logo.naturalWidth) { logo.onload(); }
    else { logo._watchSource = source; logo.src = source; }
+  }
+  var playingMark=livePlayback && el('playingBrands').firstChild;
+  if(playingMark && playingMark.className==='channelMark') {
+   el('playingShow').style.display='none';
+   playingMark.onerror=function () { if(el('playingBrands').firstChild===this) { this.style.display='none';el('playingShow').style.display='block'; } };
   }
  }
  function start(item, startPosition, recovering) {

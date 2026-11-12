@@ -5,7 +5,7 @@ const style=id=>w.getComputedStyle(w.document.getElementById(id));
 for(const name of ['live-browse','show-detail','film-detail']){
  w.document.body.className=name;
  const menu=style('navigation'),art=style('heroArt'),hero=style('hero'),fade=style('heroBottom'),text=style('heroText');
- assert.equal(parseFloat(art.top),0,name+' decorative art can extend behind the bar');assert.ok(menu.backgroundColor.startsWith('rgba('),'menu is semi-transparent');
+ assert.equal(parseFloat(art.top),0,name+' decorative art can extend behind the bar');assert.ok(menu.backgroundColor.startsWith('rgba('),'menu is semi-transparent');assert.ok(parseFloat(menu.backgroundColor.split(',').pop())<.75,'menu opacity is reduced');
  assert.ok(Math.abs(parseFloat(art.top)+parseFloat(art.height)-parseFloat(hero.height))<.01,name+' art and fade have the same bottom edge');
  assert.equal(art.overflow,'hidden');assert.equal(fade.bottom,'0px');assert.ok(Number(fade.zIndex)>Number(art.zIndex),'fade above clipped image');
  assert.ok(Number(text.zIndex)>Number(fade.zIndex),'information above fade');

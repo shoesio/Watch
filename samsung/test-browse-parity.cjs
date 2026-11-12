@@ -38,7 +38,7 @@ async function nav(id){await focusNav(w,press,id);press(13);await wait(30);}
  await nav(17);assert.equal(w.document.getElementById('seriesMenu').style.display,'block');press(40);press(40);press(13);await wait(30);
  assert.equal(w.document.getElementById('nav17').textContent,'Series 1');assert.equal(w.document.querySelector('.name').textContent,'Episode 4');
  await nav(0);assert.equal(w.document.body.className,'');assert.equal(w.document.getElementById('nav17').style.display,'none');
- await nav(8);press(13);await wait(30);assert.equal(w.document.body.className,'film-detail');assert.equal(w.document.getElementById('nav16').textContent,'Play');assert.equal(prepares.length,0);
+ await nav(8);press(13);await wait(30);assert.equal(w.document.body.className,'film-detail');assert.equal(w.document.getElementById('eyebrow').textContent,'');assert.equal(w.getComputedStyle(w.document.getElementById('eyebrow')).display,'none');assert.equal(w.document.getElementById('nav16').textContent,'Play');assert.equal(prepares.length,0);
  // Explicit sidebar selection resets the section instead of returning to its film.
  await nav(1);assert.equal(w.document.body.className,'all-shows');assert.equal(w.document.getElementById('nav17').style.display,'none');
  await nav(2);press(13);await wait(15);assert.equal(prepares.at(-1).episode_id,'live','live tunes directly');

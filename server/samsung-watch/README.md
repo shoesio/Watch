@@ -1,3 +1,9 @@
+## Film/live hero labels and lighter menu — Samsung 0.355
+
+Film detail pages now omit the repeated eyebrow, and film spotlights omit the redundant provider/episode-count caption. On live browse/loading/pause headers, the channel mark replaces the repeated channel-name heading while the programme title is retained; the heading remains available as a fallback if the mark fails to load. Now/Next information is retained. The fixed top menu opacity is reduced from 82% to 68%, without changing its position, crop clearance, fade or focus handling.
+
+The installer offers 0.355. This is widget-only; no provider/playback service restart is needed. Client checks cover film headers, live branding/fallback and the revised opacity. Physical appearance confirmation is pending.
+
 ## Translucent top menu — Samsung 0.354
 
 The fixed menu now uses a semi-transparent dark background over the decorative top portion of the hero picture. The image's existing position below the menu is preserved: crop fitting still uses the visible region below the menu and adds the menu inset when positioning the single image inside its full clipped frame. Titles, channel information, contextual tools and episode cards stay clear of navigation. Bottom fade edges and the solid tail remain unchanged. No extra background image, blur or focus animation is introduced.
